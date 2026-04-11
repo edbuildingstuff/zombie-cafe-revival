@@ -3,7 +3,6 @@ package cct_file
 import (
 	"bytes"
 	"compress/zlib"
-	"fmt"
 	"image"
 	"image/color"
 	"io"
@@ -54,8 +53,6 @@ func ReadCCTexture(file io.Reader) (CCTexture, *image.NRGBA) {
 
 	io.Copy(&out, r)
 	bytes := out.Bytes()
-
-	fmt.Printf("Decompressed: %d bytes!\n", len(bytes))
 
 	//red bytes 	0b11110000 00000000
 	//green bytes 	0b00001111 00000000

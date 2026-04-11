@@ -130,18 +130,12 @@ func WritePackedTexture(images []string, scale float32, sortByName bool, xOffset
 		})
 	}
 
-	fmt.Print(images)
-
 	for i, file := range images {
 		var entryData file_types.Offset
 		var metaData TextureMetadata
 		b, err := os.ReadFile(file + ".json")
 
-		fmt.Println(file)
-
-		if err != nil {
-			fmt.Println("Could not find json file: " + file + ".json, continuing with no offsets")
-		} else {
+		if err == nil {
 			json.Unmarshal([]byte(b), &metaData)
 		}
 
@@ -163,8 +157,6 @@ func WritePackedTexture(images []string, scale float32, sortByName bool, xOffset
 		entryData.YOffset = metaData.YOffset
 		entryData.XOffsetFlipped = metaData.XOffset2
 		entryData.YOffsetFlipped = metaData.YOffset2
-		fmt.Println("Initial rect:")
-		fmt.Print(entryData)
 		data.Offsets[i] = entryData
 
 		rects = append(rects, rect)
@@ -172,18 +164,15 @@ func WritePackedTexture(images []string, scale float32, sortByName bool, xOffset
 
 	utils.PackRectangles(rects, 2048, 2048)
 
-	num_not_packed := 0
+	var unpacked []int
 	for _, rect := range rects {
 		if !rect.WasPacked {
-			fmt.Printf("Could not pack: %d\n", rect.OriginalIndex)
-			num_not_packed += 1
+			unpacked = append(unpacked, rect.OriginalIndex)
 		}
 	}
 
-	fmt.Printf("Num rects not packed: %d\n", num_not_packed)
-
-	if num_not_packed > 0 {
-		log.Fatal("Could not pack all images :(")
+	if len(unpacked) > 0 {
+		log.Fatalf("WritePackedTexture: could not pack %d rects, indices: %v", len(unpacked), unpacked)
 	}
 
 	img := imaging.New(2048, 2048, color.Transparent)
