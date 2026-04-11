@@ -115,11 +115,15 @@ Landed:
 
 **Done when:** opening `godot/project.godot` in Godot 4 shows a rendered character sprite assembled from its `SpriteAtlas` pieces. A visible artifact proves the rendering path, not just the import path.
 
+Landed:
+- *(done)* `godot/main.tscn` + `godot/scripts/main_scene.gd` — minimal scene whose startup script calls `SpriteAtlas.load_from` and lays the 27 pieces of `boxer-human` out as `Sprite2D` children. Assembly lives in a public `assemble()` method that `_ready()` delegates to, so the headless validator can call it synchronously instead of routing through the `SceneTree._init` → `_ready` lifecycle (which defers `_ready` to the first processed frame and breaks same-call child-count assertions). `run/main_scene="res://main.tscn"` set in `project.godot` so opening the project boots straight into the rendered scene. Layout is a 9×3 grid of 140-pixel cells with the per-piece `draw_offsets` applied as a positional nudge; this is a provisional interpretation because real skeletal posing requires the per-animation keyframe parser (Phase 1b pending) — see `docs/devlog/2026-04-11-phase-2b-visible-scene.md` for the reasoning.
+- *(done)* `godot/validate_assets.gd` extended with `_validate_main_scene`, a 15th check that loads `main.tscn` as a `PackedScene`, asserts the root is `Node2D`, calls `assemble()`, and confirms exactly 27 `Sprite2D` children each holding a valid `AtlasTexture` with non-null source and non-zero region rect.
+- *(done)* `.github/workflows/godot-validation.yml` — triggers on every `push` and `pull_request`, downloads the official Godot 4.6.2 Linux x86_64 binary on `ubuntu-latest`, runs the `--editor --quit` pre-pass to build the `.godot/` class cache (required because `.godot/` is gitignored so CI always starts cold), then runs the full validator via `--headless --script`. First real green run will appear on the first push; CI URL/path assumptions are best-effort based on the standard Godot releases mirror and will be fixed in a follow-up if they fail on the runner.
+
 Pending:
-- *(pending)* `godot/main.tscn` — a minimal scene with a `Sprite2D` (or `Node2D` + multiple `Sprite2D` children) that uses `SpriteAtlas.get_character_pieces("boxer-human")` to layer all 27 pieces into a visible character.
-- *(pending)* A GitHub Actions CI entry that runs `godot --headless --path godot/ --script res://validate_assets.gd` on every push, catching any asset builder regression immediately.
 - *(pending, optimization)* Per-character index in `SpriteAtlas.get_character_pieces` — current impl does a linear scan of the regions dict per call, fine for one-off lookups but not for hot loops. Precompute a `Dictionary[String, Array[AtlasTexture]]` once during load.
 - *(pending, future)* Cafe background. Blocked on the `mapTiles` texture packer being enabled (currently commented out in the legacy `build_tool/main.go`).
+- *(pending, future)* Real skeletal posing for `boxer-human`. Blocked on the per-animation keyframe parser (Phase 1b item 2). Once that lands, replace the grid layout in `main_scene.gd` with keyframe-driven part placement using `draw_offsets` as the per-piece anchor offset.
 
 ### Phase 3 — Save-load round-trip *(blocked on Phase 0b)*
 

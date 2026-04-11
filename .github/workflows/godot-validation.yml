@@ -1,0 +1,35 @@
+name: Godot Validation
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    name: Headless asset + scene validation
+    runs-on: ubuntu-latest
+
+    env:
+      GODOT_VERSION: 4.6.2-stable
+      GODOT_BIN: Godot_v4.6.2-stable_linux.x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Godot ${{ env.GODOT_VERSION }}
+        run: |
+          set -e
+          wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/${GODOT_BIN}.zip"
+          unzip -q "${GODOT_BIN}.zip"
+          chmod +x "${GODOT_BIN}"
+          ./${GODOT_BIN} --version
+
+      # First run builds .godot/global_script_class_cache.cfg so the
+      # SpriteAtlas class_name is visible to validate_assets.gd. The
+      # .godot/ dir is gitignored, so CI always starts cold.
+      - name: Build class cache
+        run: ./${GODOT_BIN} --headless --editor --quit --path godot/
+
+      - name: Run validation script
+        run: ./${GODOT_BIN} --headless --path godot/ --script res://validate_assets.gd

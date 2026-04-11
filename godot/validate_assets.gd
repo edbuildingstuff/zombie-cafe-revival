@@ -31,6 +31,7 @@ func _init() -> void:
 
 	failures += _validate_character_atlas()
 	failures += _validate_texture_atlas()
+	failures += _validate_main_scene()
 
 	if failures.is_empty():
 		print("\n========== VALIDATION PASSED ==========")
@@ -216,4 +217,74 @@ func _validate_texture_atlas() -> Array:
 	print("  OK SpriteAtlas(furn): ",
 		atlas.regions.size(), " regions (no character art)")
 	print("    first non-degenerate key '", first_key, "' at ", first_region.region)
+	return []
+
+# main.tscn end-to-end test: load the packed scene, instantiate it,
+# and add it to the scene tree so its _ready() fires. The startup
+# script is expected to assemble the boxer-human character by
+# pulling 27 AtlasTexture pieces out of SpriteAtlas and assigning
+# them to Sprite2D children. Proves the atlas -> AtlasTexture ->
+# Sprite2D rendering path works end-to-end in a real node tree,
+# not just in the SpriteAtlas unit check above. Does not capture
+# pixels — scene-tree instantiation is enough to shake out
+# script errors, node-type mismatches, and texture-binding bugs.
+func _validate_main_scene() -> Array:
+	var path := "res://main.tscn"
+	if not ResourceLoader.exists(path):
+		return ["main scene not found: " + path]
+
+	var packed: PackedScene = load(path)
+	if packed == null:
+		return ["main scene load returned null: " + path]
+
+	var instance := packed.instantiate()
+	if instance == null:
+		return ["main scene instantiate returned null: " + path]
+
+	if not (instance is Node2D):
+		return [path + ": root is not a Node2D (got " + instance.get_class() + ")"]
+
+	# Call assemble() directly rather than routing through _ready.
+	# In an `extends SceneTree` script running from _init, nodes
+	# added to get_root() don't get their _ready callback until
+	# the first frame — too late for the synchronous child-count
+	# check below. assemble() is idempotent via the _ready guard.
+	if not instance.has_method("assemble"):
+		instance.queue_free()
+		return [path + ": root node has no assemble() method"]
+
+	var built: int = instance.call("assemble")
+	if built <= 0:
+		instance.queue_free()
+		return [path + ": assemble() built " + str(built) + " sprites"]
+
+	var sprites: Array = []
+	for child in instance.get_children():
+		if child is Sprite2D:
+			sprites.append(child)
+
+	if sprites.size() != 27:
+		instance.queue_free()
+		return [path + ": expected 27 Sprite2D children, got " + str(sprites.size())]
+
+	var valid_textures := 0
+	for s in sprites:
+		var sprite := s as Sprite2D
+		if sprite.texture != null and sprite.texture is AtlasTexture:
+			var atlas_tex := sprite.texture as AtlasTexture
+			if atlas_tex.atlas != null and atlas_tex.region.size.x > 0 and atlas_tex.region.size.y > 0:
+				valid_textures += 1
+
+	if valid_textures != 27:
+		instance.queue_free()
+		return [
+			path + ": expected 27 sprites with valid AtlasTexture, got "
+			+ str(valid_textures)
+		]
+
+	print("  OK main.tscn: ",
+		sprites.size(), " Sprite2D children, ",
+		valid_textures, " with valid AtlasTextures")
+
+	instance.queue_free()
 	return []
