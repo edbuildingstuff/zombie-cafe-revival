@@ -60,5 +60,28 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
   Memory::setProtection((void*)(base + 0xab018), 50, PROT_READ | PROT_WRITE | PROT_EXEC);
   *(char*)(base + 0x000ab018) = 0xb8;
   Memory::setNop((char*)(base + 0x000ab01a), 2);
+
+  /*
+    Patch Java_com_capcom_zombiecafeandroid_SoundManager_setEnabled (base+0x5e07c)
+    to immediately return. On modern Android, an audio-state broadcast
+    receiver fires SoundManager.setEnabled before the game's CCSound
+    singleton is initialized, which causes a null-pointer SIGSEGV deep
+    in CCSound::SetEffectsVolume on the first launch:
+
+      #00  CCSound::SetEffectsVolume(void*, float)+4
+      #01  CCSound::SetEffectsVolume(float)+10
+      #02  ZombieCafe::setSfxVolume(unsigned char)+18
+      #03  ZombieCafe::setSoundEnabled(bool)+36
+      #04  Java_com_capcom_zombiecafeandroid_SoundManager_setEnabled+66
+
+    Making the JNI entry point a no-op lets the game boot without audio,
+    which is sufficient for fixture extraction. The original instruction
+    at +0 was a 4-byte Thumb-2 push; we overwrite the first 2 bytes with
+    "bx lr" (0x4770 little-endian), which returns before any register
+    save happens so the stack stays balanced.
+  */
+  static const unsigned char bxLr[] = {0x70, 0x47};
+  Memory::memcpyProtected((void*)(base + 0x5e07c), bxLr, sizeof(bxLr));
+
   return JNI_VERSION_1_4;
 }
