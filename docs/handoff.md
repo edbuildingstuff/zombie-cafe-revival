@@ -1,7 +1,7 @@
 # Session Handoff — Zombie Cafe Revival
 
-**Last updated:** 2026-04-11 (end of day, ~49% context used before handoff)
-**Purpose:** quick orientation for a fresh session. Self-contained; read this plus `docs/rewrite-plan.md` and you should be able to continue without re-reading the 10 devlog entries.
+**Last updated:** 2026-04-12 (after the megasession)
+**Purpose:** quick orientation for a fresh session. Self-contained; read this plus `docs/devlog/2026-04-12-megasession-wrap.md` and `docs/rewrite-plan.md` and you should be able to continue without re-reading the full devlog history.
 
 ---
 
@@ -13,54 +13,49 @@
 
 ## Where we are
 
-Ten devlog entries of work today. Tracked in `docs/rewrite-plan.md` with checklist substeps. Short summary:
+Eleven devlog entries from 2026-04-11 plus one megasession entry from 2026-04-12 (`docs/devlog/2026-04-12-megasession-wrap.md`) which captures 14 commits across three phase boundaries. Tracked in `docs/rewrite-plan.md` with checklist substeps. Short summary:
 
-- **Phase 0a (done):** file_types validation harness. 13 round-trip tests + 4 sub-tests passing.
-- **Phase 0b (one item pending):** lossless parsers and symmetric writers for every binary format — `Food`, `Furniture`, `Character`, `CharacterArt`, `ImageOffsets`, `AnimationData`, `CharacterJP`, `FoodStack`, `Cafe`, `CafeState`, `CharacterInstance`, `FriendCafe`, `SaveGame`. Preservation-field approach (no semantic naming, just byte preservation). The one remaining item is **check in real binary fixtures under `tool/file_types/testdata/`** — blocked on physical-world save file extraction from a device/emulator.
-- **Phase 1a (done):** `-target godot` flag on `build_tool`. Produces a 52 MB importable tree: JSON data files, individual PNGs, OGG audio, TTF fonts.
-- **Phase 1b (atlas packing done, 5 items pending):** atlas packing landed (`PackGodotCharacters`/`PackGodotTextures` writing PNG + JSON offsets). Pending: per-animation keyframe parser, opaque binary game data parsers, `cct_file` debug print sweep, bitmap font conversion, cosmetic cleanup.
-- **Phase 1 validation (done):** Godot 4.6.2 installed, 14/14 validation checks passing against real assets. Manually verified in the editor by Edward.
-- **Phase 2a (done):** first real Godot client code. `SpriteAtlas` class handles both character atlases (composite `"<char>/<part>"` keys) and texture atlases (bare part name keys). Validated end-to-end: 3,051 character-atlas regions, 27 pieces returned by `get_character_pieces('boxer-human')`.
+- **Phase 0a (done):** file_types validation harness. Round-trip tests for every format passing.
+- **Phase 0b (done, including real fixtures):** lossless parsers and symmetric writers for every binary format. **Real device fixtures now live under `tool/file_types/testdata/`** — `playerCafe.caf` + `BACKUP1.caf` (Cafe), `globalData.dat` + `BACKUP1.dat` (SaveGame, with a new `Trailing []byte` preservation field), `ServerData.dat` (FriendCafe). All round-trip byte-identically. Extraction path is a physical ARM Samsung device via `adb shell run-as com.capcom.zombiecafeandroid`, requires rebuilding the APK with `android:debuggable="true"` and installing to user 0 to bypass Samsung Secure Folder permissions.
+- **Phase 1a (done):** `-target godot` flag on `build_tool`.
+- **Phase 1b (almost fully done):** atlas packing, animation parser (skeleton section decoded, opaque tail preserved), six opaque binary parsers (`enemyItemData`, `strings_google`, `strings_amazon`, `cookbookData`, `enemyItems`, `enemyCafeData`, `enemyLayouts`), `cct_file` debug print sweep, atlas-only output (66% size reduction). Still pending: `constants.bin.mid` (mixed endian), `font3.bin.mid` (custom bitmap format). Bitmap font conversion (item 4) and social icon copy (item 7) also pending but low-priority.
+- **Phase 1 validation (done):** 15/15 validation checks passing via `godot/validate_assets.gd` + GitHub Actions CI.
+- **Phase 2a (done):** `SpriteAtlas` with O(1) per-character piece lookup via precomputed index (was linear scan of 3,051 regions, now a single dict lookup).
+- **Phase 2b (done):** `godot/main.tscn` + `main_scene.gd` + the pose function that reads `sitSW.json` and positions 13 bone-backed Sprite2Ds from real keyframe data. Open `godot/project.godot` in Godot 4 → Run → shows boxer-human posed. Cafe background still pending (blocked on mapTiles packer re-enablement).
+- **Phase 3 (unblocked, not started):** save-load round-trip inside the Godot client. Was gated on Phase 0b closure; now possible.
 
-**Nothing is broken.** Full workspace builds clean (`file_types`, `resource_manager`, `build_tool`, `cctpacker` native; `server` under `GOOS=js GOARCH=wasm`). All tests green.
+**Legacy APK on hardware works.** `libZombieCafeExtension.so` builds cleanly from source via NDK-bundled CMake+Ninja and includes a new runtime patch that NOPs out `Java_com_capcom_zombiecafeandroid_SoundManager_setEnabled` to dodge a modern-Android broadcast-receiver race. The game boots, plays music, and survives for several minutes before hitting `Scudo: corrupted chunk header` aborts (legacy heap bugs detected by modern Android's hardened allocator — not blocking fixture extraction).
+
+**Nothing is broken.** Full workspace builds clean (`file_types`, `resource_manager`, `build_tool`, `cctpacker` native; `server` under `GOOS=js GOARCH=wasm`). All tests green. Headless Godot validation passes.
 
 ---
 
 ## What to do next (three options, pick one)
 
-### Option A — Phase 2b: visible rendered scene *(recommended)*
+### Option A — Phase 3 kickoff: Go ↔ Godot integration path *(recommended)*
 
-Smallest scope, highest symbolic value, continues the momentum from Phase 2a.
+Phase 3 was gated on Phase 0b closure and is now unblocked. Kickoff is a brainstorming + design doc session, not an immediate code session — the rewrite plan's open question is which integration path to use. Three candidates:
 
-- Create `godot/main.tscn` with a `Node2D` root containing 27 layered `Sprite2D` children.
-- Write a GDScript that calls `SpriteAtlas.get_character_pieces("boxer-human")` and assigns each `AtlasTexture` to one sprite, applying the stored `draw_offsets` for positioning.
-- Set `main.tscn` as the project's main scene in `project.godot`.
-- Add a GitHub Actions workflow running `godot --headless --path godot/ --script res://validate_assets.gd` on every push.
-- Optionally: headless screenshot of the rendered character.
+1. **`c-shared` buildmode + GDExtension.** Compile `file_types` as a native shared library and call it from GDScript via a GDExtension wrapper. Highest performance, highest complexity, platform-specific `.so`/`.dll` build matrix.
+2. **Subprocess at asset-import time only.** `build_tool` already decodes binary formats to JSON; extend the pipeline to also decode save files, ship the JSON alongside the Godot tree, and let the Godot client read JSON exclusively at runtime. No runtime Go dependency. Leading candidate per the rewrite plan.
+3. **Port `file_types` to GDScript (or C#).** Duplicate-maintenance cost but no cross-language boundary. Simplest to reason about, slowest to ship.
 
-Value: first visible artifact, shakes out any remaining `AtlasTexture`/`Sprite2D` integration gotchas, closes Phase 2b.
+First session under Option A should brainstorm the three, write a spec for the chosen path at `docs/superpowers/specs/`, and leave implementation for the session after.
 
-### Option B — Per-animation keyframe parser *(highest-value Phase 1b item)*
+### Option B — Remaining Phase 1b item 3 stragglers: `constants.bin.mid` or `font3.bin.mid`
 
-The first real byte-level reverse engineering task of the project. Higher risk, higher reward.
+Both were attempted during the megasession and deferred because their formats resist quick analysis. Each would be its own focused session.
 
-- `src/assets/data/animation/*.bin.mid` (~60 files) have no Go parser today.
-- Each file likely contains a keyframe list — per-frame positions, rotations, part references.
-- Deliverable: `ReadAnimationFile`/`WriteAnimationFile` in `file_types` with round-trip tests, plus a deserializer path in `godot.go` so the Godot tree gets JSON keyframes.
-- Game-critical — characters can't animate without this data.
-- Unknown scope: requires hex-dumping sample files, inferring structure, possibly ghidra'ing the original `.so` for anchors.
+- **`constants.bin.mid`** (9789 bytes): mixed-endian layout, first 12 bytes look like BE int32s (`1000, 10000, 3000`) but subsequent float values only decode under LE. Differential analysis across similar files OR a Ghidra pass would help.
+- **`font3.bin.mid`** (2533 bytes): custom bitmap font format — NOT standard BMFont (no `BMF` magic, no `info face=` ASCII). Would need its own RE investigation.
 
-### Option C — Phase 0b fixture sourcing *(blocked on physical-world work)*
+Medium-value. Closes the Phase 1b item 3 list entirely if both succeed.
 
-Closes Phase 0b entirely. Not a code task.
+### Option C — Fix the `Scudo` heap corruption crashes in the legacy APK
 
-- Install Android emulator (Android Studio or Waydroid), build the legacy APK via the existing `-target android` path, install, play a few minutes, extract save data via `adb pull /data/data/com.capcom.zombiecafeandroid/files/`.
-- Check in one `Cafe`, one `FriendCafe`, one `SaveGame` under `tool/file_types/testdata/`.
-- Add fixture tests that round-trip real files byte-identically.
+The game boots and runs, but hits `Scudo: corrupted chunk header` aborts after several minutes — legacy heap bugs in the native code that modern Android's hardened allocator detects during GC or finalization. The existing extension already NOPs out one known texture-destructor crash; the new crashes are in `MemMap::~MemMap` (ART GC path) and `Parcel::~Parcel` (Android framework IPC finalization). Identifying which allocation is being corrupted would need Ghidra or careful RE. Not blocking any other work — the game runs long enough for fixture extraction — but makes repeated device sessions painful.
 
-Alternatively: ask around for existing Airyz-era save files and skip the emulator pipeline.
-
-**Recommendation:** **Option A first**, then Option B. Option A is one focused session with immediate visible payoff; Option B is a bigger chunk of reverse engineering work that deserves its own fresh session with full context budget.
+**Recommendation:** **Option A**. Phase 3 is the biggest remaining arc of the rewrite and needs a design decision before any code ships. Option B is smaller scope and self-contained. Option C is only worth doing if repeated hardware sessions become a regular part of the workflow.
 
 ---
 
