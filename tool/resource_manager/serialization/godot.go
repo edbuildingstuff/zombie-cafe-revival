@@ -1,6 +1,7 @@
 package serialization
 
 import (
+	"cctpacker/cct_file"
 	"encoding/json"
 	"file_types"
 	"io/fs"
@@ -8,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/disintegration/imaging"
 )
 
 // BuildGodotAssets produces a Godot 4-friendly asset tree from the
@@ -39,8 +42,157 @@ func BuildGodotAssets(in_directory string, out_directory string) {
 	copyGodotImages(in_directory, filepath.Join(assetsOut, "images"))
 	copyGodotAudio(in_directory, filepath.Join(assetsOut, "audio"))
 	copyGodotFonts(in_directory, filepath.Join(assetsOut, "fonts"))
+	packGodotAtlases(in_directory, filepath.Join(assetsOut, "atlases"))
 
 	log.Printf("BuildGodotAssets: done")
+}
+
+// packGodotAtlases runs the atlas packers for every sprite category
+// the legacy APK build packs, writing a PNG + JSON offsets pair (and
+// for character atlases, a JSON character-art manifest as well) into
+// <out>/assets/atlases/. Scale factors match the values the legacy
+// PackCharacters / PackTextures functions use internally — see the
+// hardcoded scale maps in serialization.go for the source of truth.
+func packGodotAtlases(in_directory string, out_directory string) {
+	imagesIn := filepath.Join(in_directory, "assets", "images")
+	godotMkdir(out_directory)
+
+	PackGodotCharacters(filepath.Join(imagesIn, "characterParts"), out_directory, 0.75)
+	PackGodotCharacters(filepath.Join(imagesIn, "characterParts2"), out_directory, 0.75)
+
+	PackGodotTextures(filepath.Join(imagesIn, "recipeImages"), out_directory, 0.5)
+	PackGodotTextures(filepath.Join(imagesIn, "recipeImages2"), out_directory, 0.5)
+	PackGodotTextures(filepath.Join(imagesIn, "furniture"), out_directory, 1.0)
+	PackGodotTextures(filepath.Join(imagesIn, "furniture2"), out_directory, 0.75)
+	PackGodotTextures(filepath.Join(imagesIn, "furniture3"), out_directory, 1.0)
+}
+
+// PackGodotCharacters mirrors serialization.PackCharacters but emits
+// a PNG + JSON offsets + JSON character-art triple instead of the
+// legacy CCTX + binary offsets + binary character-art. Reuses
+// cct_file.WritePackedTexture for the layout work so atlas geometry
+// stays identical to the legacy pipeline.
+func PackGodotCharacters(in_directory string, out_directory string, scale float32) {
+	entries, err := os.ReadDir(in_directory)
+	if err != nil {
+		log.Printf("PackGodotCharacters: skipping %s: %v", in_directory, err)
+		return
+	}
+
+	var files []string
+	var folders []string
+	piecesPerPack := -1
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		folders = append(folders, entry.Name())
+
+		folderPath := filepath.Join(in_directory, entry.Name())
+		dirFiles, err := os.ReadDir(folderPath)
+		if err != nil {
+			log.Fatalf("PackGodotCharacters: reading %s: %v", folderPath, err)
+		}
+
+		numImages := 0
+		for _, file := range dirFiles {
+			if file.IsDir() {
+				continue
+			}
+			if !strings.HasSuffix(strings.ToLower(file.Name()), ".png") {
+				continue
+			}
+			numImages++
+			files = append(files, filepath.Join(folderPath, file.Name()))
+		}
+
+		if piecesPerPack == -1 {
+			piecesPerPack = numImages
+		} else if numImages != piecesPerPack {
+			log.Fatalf("PackGodotCharacters: inconsistent pieces per pack in %s (expected %d, got %d)",
+				folderPath, piecesPerPack, numImages)
+		}
+	}
+
+	if len(files) == 0 {
+		log.Printf("PackGodotCharacters: no images found in %s, skipping", in_directory)
+		return
+	}
+
+	img, offsets := cct_file.WritePackedTexture(files, scale, false, 0, 4, 2)
+	offsets.Type = 2
+
+	folderName := filepath.Base(in_directory)
+	godotMkdir(out_directory)
+
+	pngPath := filepath.Join(out_directory, folderName+".png")
+	if err := imaging.Save(img, pngPath); err != nil {
+		log.Fatalf("PackGodotCharacters: saving %s: %v", pngPath, err)
+	}
+
+	offsetsPath := filepath.Join(out_directory, folderName+".offsets.json")
+	writeJSONFile(offsetsPath, offsets)
+
+	characterArt := file_types.CharacterArt{
+		PiecesPerString: byte(piecesPerPack),
+		Strings:         folders,
+	}
+	artPath := filepath.Join(out_directory, folderName+".characterArt.json")
+	writeJSONFile(artPath, characterArt)
+}
+
+// PackGodotTextures mirrors serialization.PackTextures but emits
+// a PNG + JSON offsets pair instead of the legacy CCTX + binary
+// offsets. Reuses cct_file.WritePackedTexture for the layout work.
+func PackGodotTextures(in_directory string, out_directory string, scale float32) {
+	entries, err := os.ReadDir(in_directory)
+	if err != nil {
+		log.Printf("PackGodotTextures: skipping %s: %v", in_directory, err)
+		return
+	}
+
+	var files []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if !strings.HasSuffix(strings.ToLower(entry.Name()), ".png") {
+			continue
+		}
+		files = append(files, filepath.Join(in_directory, entry.Name()))
+	}
+
+	if len(files) == 0 {
+		log.Printf("PackGodotTextures: no images found in %s, skipping", in_directory)
+		return
+	}
+
+	img, offsets := cct_file.WritePackedTexture(files, scale, true, -1, 2, 0)
+	offsets.Type = 2
+
+	folderName := filepath.Base(in_directory)
+	godotMkdir(out_directory)
+
+	pngPath := filepath.Join(out_directory, folderName+".png")
+	if err := imaging.Save(img, pngPath); err != nil {
+		log.Fatalf("PackGodotTextures: saving %s: %v", pngPath, err)
+	}
+
+	offsetsPath := filepath.Join(out_directory, folderName+".offsets.json")
+	writeJSONFile(offsetsPath, offsets)
+}
+
+// writeJSONFile marshals v as pretty-printed JSON and writes it to
+// path. Any error is fatal.
+func writeJSONFile(path string, v interface{}) {
+	b, err := json.MarshalIndent(v, "", "    ")
+	if err != nil {
+		log.Fatalf("marshaling JSON for %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, b, 0644); err != nil {
+		log.Fatalf("writing %s: %v", path, err)
+	}
 }
 
 // copyGodotDataFiles copies the *.bin.mid.json editable data sources
