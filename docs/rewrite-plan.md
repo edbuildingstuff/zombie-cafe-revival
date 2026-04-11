@@ -75,16 +75,27 @@ Work broken into small steps, with completed ones marked:
 7. *(done)* Debug print sweep across `furniture.go`, `character.go`, `file_types.go` — three stray `fmt.Println` / `fmt.Printf` calls removed and unused `fmt` imports dropped. Test output on success is now silent across every existing test.
 8. *(pending, last item before Phase 0b closes)* Check in real binary fixtures under `tool/file_types/testdata/` — at least one `Cafe`, one `FriendCafe`, and one `SaveGame` — and extend the tests to round-trip them byte-identically. The fixture sourcing is blocked on an emulator-or-device extraction pass or on an existing Airyz-era save file being available. See `docs/devlog/2026-04-11-phase-0b-savegame.md` for the sourcing discussion.
 
-### Phase 1 — Asset export pipeline for Godot
+### Phase 1a — Asset export pipeline MVP *(done)*
 
-**Done when:** `go run ./tool/build_tool -target godot -o godot/assets/` produces a directory tree that Godot can import without manual intervention: PNGs for every texture, JSON for every data file, OGG for audio, TTF/BMFont for fonts.
+**Done when:** `go run ./tool/build_tool -target godot -i src/ -o build_godot/` produces a directory tree that Godot 4 can import without manual intervention for the asset categories Godot understands natively: JSON data files, individual PNG textures, OGG audio, TTF fonts.
 
-Why: Godot's importer wants friendly formats. We already have the Go code that can unpack CCTX → PNG and binary game data → JSON; we just need a new build-tool target that emits a Godot-friendly layout instead of an APK-friendly one.
+Landed:
+- *(done)* `-target` flag on `build_tool` selecting `android` (default, legacy APK path) or `godot`. The legacy orchestration is preserved verbatim inside a new `buildAndroid` helper; the Godot path calls `serialization.BuildGodotAssets`.
+- *(done)* `tool/resource_manager/serialization/godot.go` — new file containing `BuildGodotAssets` plus four subroutines that produce `<out>/assets/data/`, `<out>/assets/images/`, `<out>/assets/audio/`, `<out>/assets/fonts/`. Data files are either copied (`*.bin.mid.json` → `*.json`) or decoded on the fly (`animationData.bin.mid` via the existing `ReadAnimationData` parser). Images, audio, and fonts are copied verbatim from their respective source locations.
+- *(done)* `build_godot/` added to `.gitignore`.
+- *(done)* First run against the real `src/` tree produced a 41 MB output in 5 seconds: 4 JSON data files, 7,054 PNG files (subdirectory structure preserved), 205 OGG files (1 music + 204 sfx), 1 TTF. Every file is in a format Godot 4's built-in importers consume natively.
 
-Deliverables:
-- A new `-target` flag on `build_tool` selecting `android` (default, legacy) or `godot`.
-- `godot/assets/` tree populated with importable files.
-- A short doc in `docs/` explaining the asset flow.
+### Phase 1b — Asset export pipeline polish *(in progress)*
+
+**Done when:** the Godot asset tree includes everything the runtime needs to boot — atlas-packed textures with JSON offset metadata, decoded per-animation keyframe data, decoded constants/strings/enemy data — not just the categories Phase 1a covered.
+
+Pending work:
+1. *(pending)* Atlas packing. `PackCharactersForGodot` / `PackTexturesForGodot` that reuse `cct_file.WritePackedTexture` to produce an `image.NRGBA` and then save it as PNG + JSON offsets (instead of CCTX + binary offsets). This cuts the image tree size significantly and matches how Godot wants to consume sprite atlases via `AtlasTexture`.
+2. *(pending)* Per-animation keyframe parser. `src/assets/data/animation/*.bin.mid` has no Go reader today. Reverse engineer the format (probably a keyframe list with per-frame positions and part references), add `ReadAnimationFile` / `WriteAnimationFile` in `file_types`, plumb through the build tool so Godot sees JSON keyframes. Game-critical — characters can't animate without this.
+3. *(pending)* Opaque binary game data. `constants.bin.mid`, `cookbookData.bin.mid`, `enemyCafeData.bin.mid`, `enemyItemData.bin.mid`, `enemyItems.bin.mid`, `enemyLayouts.bin.mid`, `font3.bin.mid`, `strings_amazon.bin.mid`, `strings_google.bin.mid`. None have parsers. Each is its own small reverse engineering session.
+4. *(pending, lower priority)* Bitmap font conversion. `thunder_*.fnt.mid` + `thunder_*_0.png` pairs become Godot-native BMFont or sprite font format. Godot's native TTF renderer can rasterize `A Love of Thunder.ttf` at any size, so this only matters if the original bitmap rendering has a specific look that needs preserving.
+5. *(pending, cosmetic)* Skip leftover `*.cct.mid.png` artifacts left in `src/assets/images/` by previous legacy build runs. Harmless but weird naming.
+6. *(pending, cosmetic)* Copy social icons and EULA/help HTML from `src/assets/data/` if the Godot client needs them.
 
 ### Phase 2 — Godot project scaffold
 

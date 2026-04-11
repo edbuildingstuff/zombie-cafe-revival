@@ -19,6 +19,9 @@ func main() {
 	var out_directory string
 	flag.StringVar(&out_directory, "o", "", "Path of output directory")
 
+	var target string
+	flag.StringVar(&target, "target", "android", "Build target: 'android' (legacy APK) or 'godot' (Godot 4 asset tree)")
+
 	flag.Parse()
 
 	if in_directory == "" {
@@ -29,6 +32,22 @@ func main() {
 		log.Fatalln("Out directory not specified")
 	}
 
+	switch target {
+	case "android":
+		buildAndroid(in_directory, out_directory)
+	case "godot":
+		serialization.BuildGodotAssets(in_directory, out_directory)
+	default:
+		log.Fatalf("Unknown target: %q (must be 'android' or 'godot')", target)
+	}
+}
+
+// buildAndroid runs the legacy APK build pipeline: copy the hardcoded
+// file list, serialize editable JSON back to the binary formats the
+// original engine expects, and pack character/texture atlases as CCTX.
+// This is the original behavior of build_tool preserved behind the
+// -target android flag.
+func buildAndroid(in_directory string, out_directory string) {
 	os.RemoveAll(out_directory)
 	copyFiles(in_directory, out_directory)
 
