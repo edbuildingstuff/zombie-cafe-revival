@@ -2,8 +2,8 @@ package file_types
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
-	"log"
 	"math"
 )
 
@@ -60,7 +60,7 @@ func ReadByte(file io.Reader) byte {
 func ReadBool(file io.Reader) bool {
 	data := ReadNextBytes(file, 1)
 	if data[0] > 1 {
-		log.Panicln("Read bool read a byte that was not 0 or 1")
+		panic(fmt.Sprintf("ReadBool: byte was %d, not 0 or 1", data[0]))
 	}
 
 	return data[0] == 1
@@ -96,9 +96,9 @@ func ReadDate(file io.Reader) Date {
 func ReadNextBytes(file io.Reader, number int) []byte {
 	bytes := make([]byte, number)
 
-	_, err := file.Read(bytes)
+	_, err := io.ReadFull(file, bytes)
 	if err != nil {
-		log.Fatal(err)
+		panic(fmt.Sprintf("ReadNextBytes: wanted %d bytes, got %v", number, err))
 	}
 
 	return bytes

@@ -242,6 +242,58 @@ func TestImageOffsetsType1RoundTrip(t *testing.T) {
 	)
 }
 
+func TestCharacterJPRoundTrip(t *testing.T) {
+	original := []CharacterJP{
+		{
+			CafeLevelRequired:  1,
+			U2:                 2,
+			U3:                 3,
+			Name:                "ゾンビ",
+			Category:            "客",
+			CharacterArtString:  "char_jp_01",
+			U4:                  4,
+			Energy:              150,
+			Speed:               5,
+			AttackStrength:      6,
+			TipRating:           3,
+			U9:                  7,
+			U10:                 8,
+			U11:                 9,
+			U12:                 10,
+			IsFemale:            true,
+			Cost:                2000,
+			U15:                 11,
+			U16:                 12,
+			CookSpeedBonus:      1.5,
+			TipMultiplier:       2,
+			U19:                 0.75,
+			U20:                 1.25,
+			U21:                 13,
+			U22:                 14,
+			U23:                 2.5,
+			HumanDescription:    "A hungry customer.",
+			ZombieDescription:   "A ravenous zombie.",
+		},
+		{
+			CafeLevelRequired: 10,
+			Name:              "Boss",
+			Category:          "ボス",
+			Energy:            500,
+			Speed:             8,
+			AttackStrength:    12,
+			IsFemale:          false,
+			Cost:              5000,
+			HumanDescription:  "",
+			ZombieDescription: "",
+		},
+	}
+
+	assertRoundTrip(t, "CharacterJP", original,
+		func(w *bytes.Buffer, v []CharacterJP) { WriteCharactersJP(w, v) },
+		func(r *bytes.Buffer) []CharacterJP { return ReadCharactersJP(r) },
+	)
+}
+
 func TestAnimationDataRoundTrip(t *testing.T) {
 	original := []AnimationData{
 		{Form: 1, Type: 1, Direction: 0, AnimationFile: "idleNW.bin.mid"},

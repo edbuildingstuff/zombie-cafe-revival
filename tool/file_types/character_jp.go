@@ -1,8 +1,6 @@
 package file_types
 
 import (
-	"encoding/json"
-	"fmt"
 	"io"
 )
 
@@ -50,7 +48,6 @@ func readSingleCharacterJP(file io.Reader) CharacterJP {
 
 	c.U4 = ReadByte(file)
 
-	fmt.Println("---")
 	c.Energy = ReadInt32(file)
 
 	c.Speed = ReadInt16(file)
@@ -86,16 +83,62 @@ func readSingleCharacterJP(file io.Reader) CharacterJP {
 	return c
 }
 
+func writeSingleCharacterJP(file io.Writer, c CharacterJP) {
+	WriteByte(file, c.CafeLevelRequired)
+	WriteByte(file, c.U2)
+	WriteByte(file, c.U3)
+
+	WriteString(file, c.Name)
+	WriteString(file, c.Category)
+	WriteString(file, c.CharacterArtString)
+
+	WriteByte(file, c.U4)
+
+	WriteInt32(file, c.Energy)
+
+	WriteInt16(file, c.Speed)
+	WriteInt16(file, c.AttackStrength)
+
+	WriteInt16(file, c.TipRating)
+	WriteInt16(file, c.U9)
+	WriteInt16(file, c.U10)
+	WriteInt16(file, c.U11)
+
+	WriteInt16(file, c.U12)
+
+	WriteBool(file, c.IsFemale)
+
+	WriteInt32(file, c.Cost)
+
+	WriteByte(file, c.U15)
+	WriteByte(file, c.U16)
+
+	WriteFloat(file, c.CookSpeedBonus)
+	WriteInt32(file, c.TipMultiplier)
+
+	WriteFloat(file, c.U19)
+	WriteFloat(file, c.U20)
+
+	WriteByte(file, c.U21)
+	WriteInt16(file, c.U22)
+	WriteFloat(file, c.U23)
+
+	WriteString(file, c.HumanDescription)
+	WriteString(file, c.ZombieDescription)
+}
+
 func ReadCharactersJP(file io.Reader) []CharacterJP {
 	data := []CharacterJP{}
 	n := ReadInt16(file)
 	for i := 0; i < int(n); i++ {
-
-		fmt.Printf("Reading character: %d\n", i)
-		character := readSingleCharacterJP(file)
-		data = append(data, character)
-		js, _ := json.MarshalIndent(character, "", "    ")
-		fmt.Println(string(js))
+		data = append(data, readSingleCharacterJP(file))
 	}
 	return data
+}
+
+func WriteCharactersJP(file io.Writer, data []CharacterJP) {
+	WriteInt16(file, int16(len(data)))
+	for _, c := range data {
+		writeSingleCharacterJP(file, c)
+	}
 }
