@@ -56,32 +56,23 @@ Deliverables:
 - `WriteFoods` signature widened from `*os.File` to `io.Writer` for consistency with every other writer in the package.
 - A `go test` invocation documented in the README once the tests have been verified green.
 
-### Phase 0b — Lossless parsers and missing writers *(blocks Phase 3)*
+### Phase 0b — Lossless parsers and missing writers *(in progress, blocks Phase 3)*
 
-**Done when:** `SaveGame`, `Cafe`, `FriendCafe`, and `CharacterJP` all round-trip byte-identically through Read → Write on real fixture files extracted from the decompiled APK.
+**Done when:** `SaveGame`, `Cafe`, and `FriendCafe` all round-trip byte-identically through Read → Write on in-memory fixtures covering every version-conditional code path, and on at least one real binary fixture per format.
 
-Why this is its own phase: the existing readers for these formats are *lossy*. `readSaveStrings` in `save_game.go` reads length-prefixed string arrays and throws every string away. `ReadCafe` reads a trailing `int32` count followed by that many `int32`s into nowhere (with a note-to-self comment conceding the author wasn't sure it was right). `readFoodStack` in `cafe.go` reads a byte into `f.U1`, then on `version > 24` overwrites it with a second byte — losing the first. The same function reads two consecutive strings and stores only the first. None of this is a bug in the sense of "the build pipeline is broken" — the build pipeline never round-trips these formats, so there's been no pressure to be lossless. It *is* a bug in the sense of "we cannot use this as the source of truth for the Godot client's save/load path."
+Why this is its own phase: the existing readers for `SaveGame`, `Cafe`, and `FriendCafe` are *lossy*. `readSaveStrings` in `save_game.go` reads length-prefixed string arrays and throws every string away. `ReadCafe` was reading a `float64` header, a trailing `int32` block, and a second version-conditional `int32` block entirely into nowhere. `readFoodStack` in `cafe.go` read a byte into `f.U1`, then on `version > 24` overwrote it with a second byte — losing the first — and also read a second string after `f.U6` that went straight into the void. `readCafeFurniture` read a `furnitureType` byte, branched on it, and never stored it. None of this is a bug in the sense of "the build pipeline is broken" — the build pipeline never round-trips these formats, so there's been no pressure to be lossless. It *is* a bug in the sense of "we cannot use this as the source of truth for the Godot client's save/load path."
 
-Fixing it means:
+**Approach: preservation fields, not Ghidra.** An earlier version of this plan assumed we'd need to reverse-engineer `libZombieCafeAndroid.so` in Ghidra to understand what the currently-discarded bytes *mean* before we could preserve them. That's wrong — byte preservation doesn't require byte understanding. We can add `U0`/`TrailingInts1`/`U6Alt`/`FurnitureType` placeholder fields to the structs, populate them from the readers, write them back from the writers, and leave the semantic naming for whenever Phase 4 needs to act on a specific field. The existing `U1`/`U2`/`U3` convention in Airyz's code is exactly this pattern, one step further. Ghidra remains valuable for Phase 4 (game tick implementation in the Godot client), not Phase 0b.
 
-1. For each lossy read site, add struct fields that capture the currently-discarded data.
-2. Update the reader to populate those fields instead of dropping them.
-3. Write the corresponding writer.
-4. Harden `ReadNextBytes` in `binary_reader.go` to return an error (or panic) instead of calling `log.Fatal`, so that malformed fixtures in tests fail cleanly instead of killing the test binary.
-5. Use `io.ReadFull` wherever a fixed-length read happens, to close the partial-read gap in the `io.Reader` contract.
-6. Check in binary fixtures under `tool/file_types/testdata/` — real files extracted from the decompiled APK, one per format.
-7. Extend `roundtrip_test.go` (or add per-format `*_test.go` files) to assert byte-level equality for each format against its checked-in fixture.
+Work broken into small steps, with completed ones marked:
 
-Some of this requires going back to Ghidra and understanding what the currently-discarded fields *mean* — specifically for `SaveGame` and `Cafe`. The anchors labelled in `src/lib/cpp/ZombieCafeExtension.cpp` should put us close enough to the save/cafe serialization entry points in the original `.so` to answer that.
-
-Recommended starting point: `CharacterJP`. It has no version-conditional reads and no trailing-garbage reads, so adding `WriteCharactersJP` is the most mechanical of the four missing writers and a good rehearsal before tackling `SaveGame`.
-
-Deliverables:
-- `WriteSaveGame`, `WriteCafe`, `WriteFriendData`, `WriteCharactersJP`.
-- Additional struct fields on `SaveGame`, `Cafe`, and their sub-types to preserve data that is currently discarded.
-- `ReadNextBytes` returns an error instead of `log.Fatal`; callers updated to propagate.
-- `tool/file_types/testdata/` with one binary fixture per format.
-- Round-trip tests for all four formats passing against real fixtures.
+1. *(done)* `ReadNextBytes` hardened with `io.ReadFull` + `panic` instead of single `file.Read` + `log.Fatal`, so tests can catch parser failures cleanly. `ReadBool` given the same panic treatment.
+2. *(done)* `WriteCharactersJP` added as the mechanical rehearsal. `CharacterJP` had no lossy reads and no version conditionals, which made it a clean dry-run before the harder cafe work. `TestCharacterJPRoundTrip` passing.
+3. *(done)* Primitive writers `WriteInt64`, `WriteFloat64`, `WriteDate` added to `binary_writer.go`. These are consumed by the cafe and save-game writer families.
+4. *(done)* Cafe family parsers extended to preserve previously-discarded bytes: `Cafe.U0` (header `float64`), `Cafe.TrailingInts1` and `Cafe.TrailingInts2`, `FoodStack.U0` and `FoodStack.U6Alt`, `CafeFurniture.FurnitureType`. All readers updated; `ReadCafe` now loses zero bytes on the path to its return value. Debug prints stripped from `cafe.go`.
+5. *(next session)* Cafe family writers: `writeFoodStack`, `writeFood`, `writeStove`, `writeServingCounter`, `writeCafeWall`, `writeCafeObject`, `writeCafeFurniture`, `writeCafeTile`, `WriteCafe`. Plus `writeCharacter` (for `CharacterInstance` in `save_game.go`), `writeCafeState`, and `WriteFriendData`. All mechanical mirrors of the readers with matching version conditionals. In-memory round-trip tests for `Cafe` and `FriendCafe` covering multiple versions and every furniture variant.
+6. *(later session)* `SaveGame`. Blocked on designing a clean preservation struct for `readSaveStrings`'s unusual subtract-one count encoding. Separate focused session of its own.
+7. *(when writers land)* Check in real binary fixtures under `tool/file_types/testdata/` — at least one `Cafe`, one `FriendCafe`, and one `SaveGame` — and extend the tests to round-trip them byte-identically.
 
 ### Phase 1 — Asset export pipeline for Godot
 

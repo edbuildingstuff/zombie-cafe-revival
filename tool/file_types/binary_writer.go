@@ -42,9 +42,21 @@ func WriteInt32LittleEndian(file io.Writer, value int32) {
 	file.Write(b)
 }
 
+func WriteInt64(file io.Writer, value int64) {
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint64(b, uint64(value))
+	file.Write(b)
+}
+
 func WriteFloat(file io.Writer, value float32) {
 	b := make([]byte, 4)
 	binary.LittleEndian.PutUint32(b, math.Float32bits(value))
+	file.Write(b)
+}
+
+func WriteFloat64(file io.Writer, value float64) {
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, math.Float64bits(value))
 	file.Write(b)
 }
 
@@ -63,4 +75,13 @@ func WriteBool(file io.Writer, value bool) {
 func WriteString(file io.Writer, value string) {
 	WriteInt16(file, int16(len(value)))
 	file.Write([]byte(value))
+}
+
+func WriteDate(file io.Writer, d Date) {
+	WriteInt16(file, d.Year)
+	WriteByte(file, d.Month)
+	WriteByte(file, d.Day)
+	WriteByte(file, d.Hour)
+	WriteByte(file, d.Minute)
+	WriteByte(file, d.Second)
 }
