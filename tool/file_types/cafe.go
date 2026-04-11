@@ -420,3 +420,251 @@ func ReadCafe(file io.Reader) Cafe {
 
 	return c
 }
+
+func writeFoodStack(file io.Writer, f FoodStack, version int) {
+	if version > 24 {
+		WriteByte(file, f.U0)
+	}
+	WriteByte(file, f.U1)
+
+	if version > 48 {
+		WriteInt32(file, f.U3)
+	}
+
+	if version <= 48 {
+		WriteInt16(file, f.U4)
+	}
+
+	WriteByte(file, f.U5)
+	WriteString(file, f.U6)
+	WriteString(file, f.U6Alt)
+
+	if version > 51 {
+		WriteDate(file, f.U7)
+	}
+}
+
+func writeFood(file io.Writer, f CafeFoodData, version int) {
+	if version <= 48 {
+		WriteByte(file, byte(f.U1))
+	} else {
+		WriteInt32(file, f.U1)
+	}
+
+	WriteByte(file, f.U2)
+	WriteBool(file, f.U3)
+	if f.U3 {
+		writeCafeObject(file, *f.Object, version)
+	}
+
+	WriteByte(file, f.U4)
+
+	if version > 23 {
+		WriteInt16(file, f.U5)
+		if version > 47 {
+			WriteDate(file, f.U6)
+		}
+	}
+
+	writeFoodStack(file, f.U7, version)
+}
+
+func writeStove(file io.Writer, s Stove, version int) {
+	if version <= 48 {
+		WriteByte(file, byte(s.U1))
+	} else {
+		WriteInt32(file, s.U1)
+	}
+
+	WriteByte(file, s.U2)
+	WriteBool(file, s.HasObject)
+
+	if s.HasObject {
+		writeCafeObject(file, *s.Object, version)
+	}
+
+	WriteByte(file, s.U5)
+	if version > 23 {
+		WriteInt16(file, s.U6)
+	}
+
+	if version > 47 {
+		WriteDate(file, s.U7)
+	}
+
+	WriteBool(file, s.HasFoodStack)
+	if s.HasFoodStack {
+		writeFoodStack(file, *s.FoodStack, version)
+	}
+
+	WriteInt64(file, s.U8)
+	WriteInt64(file, s.U9)
+}
+
+func writeServingCounter(file io.Writer, s ServingCounter, version int) {
+	if version > 48 {
+		WriteInt32(file, s.U1)
+	} else {
+		WriteByte(file, byte(s.U1))
+	}
+
+	WriteByte(file, s.U2)
+	WriteBool(file, s.HasObject)
+	if s.HasObject {
+		writeCafeObject(file, *s.Object, version)
+	}
+
+	WriteByte(file, s.U3)
+
+	if version > 23 {
+		WriteInt16(file, s.U4)
+	}
+
+	if version > 47 {
+		WriteDate(file, s.U5)
+	}
+
+	if version > 25 {
+		WriteInt32(file, s.U6)
+	} else {
+		WriteInt16(file, int16(s.U6))
+	}
+
+	WriteInt16(file, s.NumFoodStacks)
+	for i := 0; i < int(s.NumFoodStacks); i++ {
+		writeFoodStack(file, s.FoodStacks[i], version)
+	}
+}
+
+func writeCafeFurniture(file io.Writer, c CafeFurniture, version int) {
+	isFood := c.Food != nil
+	WriteBool(file, isFood)
+
+	if isFood {
+		WriteByte(file, c.U1)
+		writeFood(file, *c.Food, version)
+	} else {
+		WriteByte(file, c.FurnitureType)
+		if c.FurnitureType == 1 {
+			writeStove(file, *c.Stove, version)
+		} else if c.FurnitureType == 2 {
+			writeServingCounter(file, *c.ServingCounter, version)
+		} else {
+			if version > 48 {
+				WriteInt32(file, c.U2)
+			} else {
+				WriteByte(file, byte(c.U2))
+			}
+
+			WriteByte(file, c.Orientation)
+			WriteBool(file, c.HasObject)
+			if c.HasObject {
+				writeCafeObject(file, *c.Object, version)
+			}
+
+			WriteByte(file, c.U3)
+
+			if version > 23 {
+				WriteInt16(file, c.U4)
+			}
+
+			if version > 47 {
+				WriteDate(file, c.U5)
+			}
+		}
+	}
+}
+
+func writeCafeWall(file io.Writer, c CafeWall, version int) {
+	if version > 58 {
+		WriteInt16(file, c.U1)
+	} else {
+		WriteByte(file, byte(c.U1))
+	}
+
+	WriteBool(file, c.U2)
+	WriteBool(file, c.U3)
+	WriteBool(file, c.U4)
+	WriteInt32(file, c.U5)
+	WriteBool(file, c.HasDecoration)
+
+	if c.HasDecoration {
+		writeCafeObject(file, *c.DecorationObject, version)
+	}
+}
+
+func writeCafeObject(file io.Writer, o CafeObject, version int) {
+	WriteByte(file, o.Type)
+
+	if o.Type == 1 {
+		writeCafeFurniture(file, *o.Furniture, version)
+	}
+
+	if o.Type == 2 {
+		writeCafeWall(file, *o.Wall, version)
+	}
+
+	if o.Type == 2 || o.Type == 1 {
+		WriteInt32(file, o.U1)
+		WriteInt16(file, o.U2)
+		WriteInt16(file, o.U3)
+		WriteBool(file, o.U4)
+	}
+}
+
+func writeCafeTile(file io.Writer, t CafeTile, version int) {
+	if version <= 58 {
+		WriteByte(file, byte(t.U1))
+	} else {
+		WriteInt16(file, t.U1)
+	}
+
+	WriteInt32(file, t.U2)
+	WriteBool(file, t.U3)
+	WriteBool(file, t.U4)
+	if t.U4 {
+		writeCafeObject(file, *t.U5, version)
+	}
+
+	WriteBool(file, t.U6)
+	if t.U6 {
+		writeCafeObject(file, *t.U7, version)
+	}
+
+	WriteBool(file, t.U8)
+	if t.U8 {
+		writeCafeObject(file, *t.U9, version)
+	}
+}
+
+func WriteCafe(file io.Writer, c Cafe) {
+	WriteByte(file, c.Version)
+	WriteFloat64(file, c.U0)
+	WriteByte(file, c.SizeX)
+	WriteByte(file, c.SizeY)
+	WriteInt16(file, c.U3)
+	WriteInt16(file, c.U4)
+
+	if c.Version > 48 {
+		WriteInt32(file, c.MapSizeX)
+		WriteInt32(file, c.MapSizeY)
+	}
+
+	WriteBool(file, c.U7)
+
+	for _, tile := range c.Tiles {
+		writeCafeTile(file, tile, int(c.Version))
+	}
+
+	WriteInt32(file, c.U8)
+	for _, v := range c.TrailingInts1 {
+		WriteInt32(file, v)
+	}
+
+	if c.Version > 61 {
+		WriteInt32(file, int32(len(c.TrailingInts2)))
+		for _, v := range c.TrailingInts2 {
+			WriteInt32(file, v)
+		}
+	}
+}

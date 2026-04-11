@@ -308,6 +308,212 @@ func TestAnimationDataRoundTrip(t *testing.T) {
 	)
 }
 
+// makeCafeFixture builds a Cafe at version 63 that touches every branch
+// in the reader: all three CafeFurniture variants (Food, Stove,
+// ServingCounter, plain), decorated and undecorated walls, tiles with
+// every combination of U4/U6/U8 pointer slots, non-empty TrailingInts1,
+// non-empty TrailingInts2, a FoodStack in a Stove, multiple FoodStacks
+// in a ServingCounter, and a Food with its own inner Object=nil case.
+func makeCafeFixture() Cafe {
+	date1 := Date{Year: 2024, Month: 1, Day: 15, Hour: 12, Minute: 30, Second: 45}
+	date2 := Date{Year: 2025, Month: 6, Day: 30, Hour: 8, Minute: 15, Second: 0}
+	date3 := Date{Year: 2026, Month: 4, Day: 11, Hour: 23, Minute: 59, Second: 59}
+
+	stoveObj := CafeObject{
+		Type: 1,
+		Furniture: &CafeFurniture{
+			FurnitureType: 1,
+			Stove: &Stove{
+				U1:        100,
+				U2:        5,
+				HasObject: false,
+				U5:        1,
+				U6:        2,
+				U7:        date1,
+				HasFoodStack: true,
+				FoodStack: &FoodStack{
+					U0: 1, U1: 2, U3: 500, U5: 3,
+					U6: "meat_stew", U6Alt: "stew_icon",
+					U7: date2,
+				},
+				U8: 1234567890,
+				U9: 9876543210,
+			},
+		},
+		U1: 10, U2: 20, U3: 30, U4: true,
+	}
+
+	counterObj := CafeObject{
+		Type: 1,
+		Furniture: &CafeFurniture{
+			FurnitureType: 2,
+			ServingCounter: &ServingCounter{
+				U1:        200,
+				U2:        4,
+				HasObject: false,
+				U3:        2,
+				U4:        5,
+				U5:        date1,
+				U6:        50,
+				NumFoodStacks: 2,
+				FoodStacks: []FoodStack{
+					{U0: 0, U1: 1, U3: 150, U5: 2, U6: "pizza", U6Alt: "pizza_icon", U7: date2},
+					{U0: 3, U1: 4, U3: 175, U5: 5, U6: "burger", U6Alt: "", U7: date3},
+				},
+			},
+		},
+		U1: 11, U2: 21, U3: 31, U4: false,
+	}
+
+	plainObj := CafeObject{
+		Type: 1,
+		Furniture: &CafeFurniture{
+			FurnitureType: 7, // neither 0 nor 1 nor 2 — plain furniture byte preserved
+			U2:            500,
+			Orientation:   1,
+			HasObject:     false,
+			U3:            6,
+			U4:            7,
+			U5:            date1,
+		},
+		U1: 12, U2: 22, U3: 32, U4: true,
+	}
+
+	foodObj := CafeObject{
+		Type: 1,
+		Furniture: &CafeFurniture{
+			U1: 99,
+			Food: &CafeFoodData{
+				U1: 1000,
+				U2: 10,
+				U3: false,
+				U4: 20,
+				U5: 30,
+				U6: date2,
+				U7: FoodStack{
+					U0: 5, U1: 6, U3: 800, U5: 7,
+					U6: "soup", U6Alt: "soup_alt",
+					U7: date3,
+				},
+			},
+		},
+		U1: 13, U2: 23, U3: 33, U4: false,
+	}
+
+	wallObj := CafeObject{
+		Type: 2,
+		Wall: &CafeWall{
+			U1: 42,
+			U2: true, U3: false, U4: true,
+			U5:            1000,
+			HasDecoration: false,
+		},
+		U1: 14, U2: 24, U3: 34, U4: true,
+	}
+
+	decoratedWallObj := CafeObject{
+		Type: 2,
+		Wall: &CafeWall{
+			U1: 77,
+			U2: false, U3: true, U4: false,
+			U5:            2000,
+			HasDecoration: true,
+			DecorationObject: &CafeObject{
+				Type: 1,
+				Furniture: &CafeFurniture{
+					FurnitureType: 9,
+					U2:            123,
+					Orientation:   2,
+					U3:            8,
+					U4:            9,
+					U5:            date1,
+				},
+				U1: 15, U2: 25, U3: 35, U4: false,
+			},
+		},
+		U1: 16, U2: 26, U3: 36, U4: true,
+	}
+
+	tiles := []CafeTile{
+		// tile 0: only U5 slot filled with stove
+		{U1: 1, U2: 100, U3: true, U4: true, U5: &stoveObj, U6: false, U8: false},
+		// tile 1: U5 and U7 filled (counter + plain)
+		{U1: 2, U2: 200, U3: false, U4: true, U5: &counterObj, U6: true, U7: &plainObj, U8: false},
+		// tile 2: only U9 filled (decorated wall)
+		{U1: 3, U2: 300, U3: true, U4: false, U6: false, U8: true, U9: &decoratedWallObj},
+		// tile 3: U5 food + U7 wall (undecorated) + U9 nil
+		{U1: 4, U2: 400, U3: false, U4: true, U5: &foodObj, U6: true, U7: &wallObj, U8: false},
+	}
+
+	return Cafe{
+		Version:       63,
+		U0:            12345.6789,
+		SizeX:         2, SizeY: 2,
+		U3:            10, U4: 20,
+		MapSizeX:      2, MapSizeY: 2,
+		U7:            true,
+		Tiles:         tiles,
+		U8:            3,
+		TrailingInts1: []int32{111, 222, 333},
+		TrailingInts2: []int32{444, 555},
+	}
+}
+
+func makeCafeStateFixture() CafeState {
+	mainChar := CharacterInstance{
+		Type: 1, Name: "MainZombie",
+		U2: 1, U3: 2, U4: 3.5, U5: 4,
+		U6: 1000000000, U7: 5, U8: 2000000000, U9: 3000000000,
+		U10: 10, U11: 20, U12: 30, U13: 40,
+		U14: 50, U15: 60, U16: 70,
+	}
+	zombie := CharacterInstance{
+		Type: 2, Name: "Z1",
+		U2: 3, U3: 4, U4: 5.5, U5: 6,
+		U6: 1500000000, U7: 7, U8: 2500000000, U9: 3500000000,
+		U10: 11, U11: 21, U12: 31, U13: 41,
+		U14: 51, U15: 61, U16: 71,
+	}
+	return CafeState{
+		U1:               123.456,
+		ExperiencePoints: 999.5,
+		Toxin:            50,
+		Money:            500,
+		Level:            5,
+		U6:               1, U7: 2,
+		U8:  3.0, U9: 4,
+		U10:        true,
+		Character:  mainChar,
+		NumZombies: 1,
+		Zombies:    []CharacterInstance{zombie},
+		U11:        3,
+		U12:        []int8{1, 2, 3},
+		U13:        true,
+	}
+}
+
+func TestCafeRoundTrip(t *testing.T) {
+	original := makeCafeFixture()
+
+	assertRoundTrip(t, "Cafe", original,
+		func(w *bytes.Buffer, v Cafe) { WriteCafe(w, v) },
+		func(r *bytes.Buffer) Cafe { return ReadCafe(r) },
+	)
+}
+
+func TestFriendCafeRoundTrip(t *testing.T) {
+	original := FriendCafe{
+		Version: 63,
+		State:   makeCafeStateFixture(),
+		Cafe:    makeCafeFixture(),
+	}
+
+	assertRoundTrip(t, "FriendCafe", original,
+		func(w *bytes.Buffer, v FriendCafe) { WriteFriendData(w, v) },
+		func(r *bytes.Buffer) FriendCafe { return ReadFriendData(r) },
+	)
+}
+
 // TestAnimationDataFixture parses the real animationData.bin.mid fixture
 // from src/assets/data/ and confirms the parser consumes it cleanly and
 // produces a non-empty slice. This is the one binary fixture in the tree

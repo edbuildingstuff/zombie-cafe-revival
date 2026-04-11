@@ -167,3 +167,62 @@ func ReadSaveGame(file io.Reader) SaveGame {
 
 	return s
 }
+
+func writeCharacter(file io.Writer, c CharacterInstance, fileVersion int) {
+	WriteByte(file, c.Type)
+	WriteString(file, c.Name)
+	WriteByte(file, c.U2)
+	WriteByte(file, c.U3)
+	WriteFloat(file, c.U4)
+	WriteByte(file, c.U5)
+	WriteInt64(file, c.U6)
+	WriteByte(file, c.U7)
+	WriteInt64(file, c.U8)
+	WriteInt64(file, c.U9)
+	WriteInt32(file, c.U10)
+	WriteInt32(file, c.U11)
+	WriteInt32(file, c.U12)
+	WriteInt32(file, c.U13)
+
+	if fileVersion > 29 {
+		WriteByte(file, c.U14)
+		if fileVersion > 46 {
+			WriteInt32(file, c.U15)
+			WriteInt32(file, c.U16)
+		}
+	}
+}
+
+func writeCafeState(file io.Writer, save CafeState, version int) {
+	WriteFloat64(file, save.U1)
+	WriteFloat(file, save.ExperiencePoints)
+	WriteInt32(file, save.Toxin)
+	WriteInt32(file, save.Money)
+	WriteInt32(file, save.Level)
+	WriteInt32(file, save.U6)
+	WriteInt32(file, save.U7)
+	WriteFloat(file, save.U8)
+	WriteInt32(file, save.U9)
+	WriteBool(file, save.U10)
+
+	writeCharacter(file, save.Character, version)
+
+	WriteByte(file, save.NumZombies)
+	for i := 0; i < int(save.NumZombies); i++ {
+		writeCharacter(file, save.Zombies[i], version)
+	}
+
+	if version > 62 {
+		WriteInt32(file, save.U11)
+	} else {
+		WriteByte(file, byte(save.U11))
+	}
+
+	for i := 0; i < int(save.U11); i++ {
+		WriteByte(file, byte(save.U12[i]))
+	}
+
+	if version > 33 {
+		WriteBool(file, save.U13)
+	}
+}
