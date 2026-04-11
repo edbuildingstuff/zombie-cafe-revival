@@ -39,6 +39,7 @@ func BuildGodotAssets(in_directory string, out_directory string) {
 	deserializeAnimationDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeEnemyItemDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeEnemyItemsForGodot(in_directory, filepath.Join(assetsOut, "data"))
+	deserializeEnemyCafeDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeStringsFilesForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeCookbookDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	copyGodotAudio(in_directory, filepath.Join(assetsOut, "audio"))
@@ -222,6 +223,26 @@ func copyGodotDataFiles(in_directory string, out_directory string) {
 		dst := filepath.Join(out_directory, friendly)
 		godotCopyFile(src, dst)
 	}
+}
+
+// deserializeEnemyCafeDataForGodot decodes src/assets/data/enemyCafeData.bin.mid
+// using ReadEnemyCafeData and writes a pretty-printed JSON version to
+// <out>/assets/data/enemyCafeData.json. Missing source logs and returns.
+func deserializeEnemyCafeDataForGodot(in_directory string, out_data_directory string) {
+	src := filepath.Join(in_directory, "assets", "data", "enemyCafeData.bin.mid")
+	dst := filepath.Join(out_data_directory, "enemyCafeData.json")
+
+	f, err := os.Open(src)
+	if err != nil {
+		log.Printf("enemyCafeData not present at %s: %v (skipping)", src, err)
+		return
+	}
+	defer f.Close()
+
+	data := file_types.ReadEnemyCafeData(f)
+
+	godotMkdir(filepath.Dir(dst))
+	writeJSONFile(dst, data)
 }
 
 // deserializeEnemyItemsForGodot decodes src/assets/data/enemyItems.bin.mid

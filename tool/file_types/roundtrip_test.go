@@ -658,6 +658,92 @@ func findRepoRoot(t *testing.T) string {
 	return ""
 }
 
+func TestEnemyCafeDataRoundTrip(t *testing.T) {
+	repoRoot := findRepoRoot(t)
+	path := filepath.Join(repoRoot, "src", "assets", "data", "enemyCafeData.bin.mid")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("fixture not present at %s: %v", path, err)
+	}
+
+	parsed := ReadEnemyCafeData(bytes.NewReader(raw))
+
+	var buf bytes.Buffer
+	WriteEnemyCafeData(&buf, parsed)
+
+	if !bytes.Equal(raw, buf.Bytes()) {
+		t.Fatalf("enemyCafeData round-trip bytes differ (orig %d, got %d)",
+			len(raw), buf.Len())
+	}
+
+	if parsed.Count != 14 {
+		t.Errorf("Count = %d, expected 14", parsed.Count)
+	}
+	if len(parsed.Entries) != 14 {
+		t.Errorf("Entries len = %d, expected 14", len(parsed.Entries))
+	}
+	if len(parsed.Entries) >= 1 && parsed.Entries[0].Name != "Cafe" {
+		t.Errorf("Entries[0].Name = %q, expected \"Cafe\"", parsed.Entries[0].Name)
+	}
+	// First 13 entries have the tail (Flag4 + LocationName); the last
+	// entry ("Villain") is truncated after Flag3.
+	if len(parsed.Entries) >= 14 {
+		for i := 0; i < 13; i++ {
+			if !parsed.Entries[i].HasTail {
+				t.Errorf("Entries[%d].HasTail = false, expected true", i)
+			}
+		}
+		if parsed.Entries[13].HasTail {
+			t.Errorf("Entries[13].HasTail = true, expected false (last entry is truncated)")
+		}
+		if parsed.Entries[13].Name != "Villain" {
+			t.Errorf("Entries[13].Name = %q, expected \"Villain\"", parsed.Entries[13].Name)
+		}
+	}
+}
+
+func TestEnemyCafeDataInMemoryFixture(t *testing.T) {
+	fixture := EnemyCafeData{
+		Count:      2,
+		HeaderFlag: 304,
+		Entries: []EnemyCafeEntry{
+			{
+				Name:         "First",
+				SubType:      0,
+				SequenceID:   5,
+				CafeID:       100,
+				Data:         "1_2_3",
+				Flag1:        10,
+				Flag2:        -1,
+				Flag3:        20,
+				HasTail:      true,
+				Flag4:        30,
+				LocationName: "Some Place",
+			},
+			{
+				Name:       "Last",
+				SubType:    1,
+				SequenceID: 6,
+				CafeID:     200,
+				Data:       "4_5",
+				Flag1:      40,
+				Flag2:      50,
+				Flag3:      60,
+				HasTail:    false,
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	WriteEnemyCafeData(&buf, fixture)
+
+	parsed := ReadEnemyCafeData(bytes.NewReader(buf.Bytes()))
+
+	if !reflect.DeepEqual(parsed, fixture) {
+		t.Errorf("fixture mismatch:\n  got %#v\n  want %#v", parsed, fixture)
+	}
+}
+
 // TestEnemyItemsRoundTrip exercises ReadEnemyItems/WriteEnemyItems
 // against the real enemyItems.bin.mid file. Flat string-list format
 // with a 2-byte count header.
