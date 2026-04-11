@@ -2,7 +2,6 @@ package file_types
 
 import (
 	"io"
-	"os"
 )
 
 type Food struct {
@@ -70,7 +69,7 @@ func ReadFoods(file io.Reader) []Food {
 	return data
 }
 
-func WriteFoods(file *os.File, foods []Food) {
+func WriteFoods(file io.Writer, foods []Food) {
 
 	WriteByte(file, byte(len(foods)))
 

@@ -31,3 +31,17 @@ func ReadAnimationData(file io.Reader) []AnimationData {
 
 	return data
 }
+
+func writeSingleAnimationData(file io.Writer, data AnimationData) {
+	WriteByte(file, data.Form)
+	WriteByte(file, data.Type)
+	WriteByte(file, data.Direction)
+	WriteString(file, data.AnimationFile)
+}
+
+func WriteAnimationData(file io.Writer, data []AnimationData) {
+	WriteByte(file, byte(len(data)))
+	for _, entry := range data {
+		writeSingleAnimationData(file, entry)
+	}
+}

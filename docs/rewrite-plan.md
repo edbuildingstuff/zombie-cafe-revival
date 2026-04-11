@@ -42,16 +42,46 @@ We are rewriting the *Zombie Cafe* client as a **Godot 4** project that consumes
 
 Each phase has a concrete "done" criterion. We do not start phase N+1 until phase N's criterion is met.
 
-### Phase 0 — Validation harness *(before writing any Godot code)*
+### Phase 0a — Validation harness for symmetric formats *(in progress)*
 
-**Done when:** `go test ./tool/file_types/...` round-trips every `.bin.mid` file in `src/assets/data/` and asserts byte-level equality after `Deserialize → Serialize`.
+**Done when:** `go test ./tool/file_types/...` passes on the round-trip tests in `tool/file_types/roundtrip_test.go` for every format that currently has both a `Read*` and `Write*` function.
 
-Why first: the Go binary format code currently has zero tests. Before we trust it as the bridge between old saves and the Godot client, we need a test suite that proves the existing parsers are lossless on real data. Without this, any bug in the Godot client can always be blamed on "maybe the parser is wrong" and we'll chase ghosts.
+Why first: the Go binary format code had zero tests. Before we trust any part of it as the bridge between old saves and the Godot client, we need to lock in Read/Write symmetry where it already exists — so any future refactor of `file_types` can be validated against a regression baseline.
+
+Scope: six formats. `Food`, `Furniture`, `Character`, `CharacterArt`, `ImageOffsets` (both `Type=1` and `Type=2`), and `AnimationData` (after adding the missing `WriteAnimationData` in this phase). All tested with in-memory fixtures. One real-file smoke test against `src/assets/data/animationData.bin.mid`.
 
 Deliverables:
-- `tool/file_types/save_game_test.go`, `cafe_test.go`, `character_test.go`, etc.
-- A small fixture loader that pulls sample files from `src/assets/data/`.
-- A `go test` invocation documented in the README.
+- `tool/file_types/roundtrip_test.go` with in-memory round-trip tests.
+- `WriteAnimationData` added to `animation_data.go`.
+- `WriteFoods` signature widened from `*os.File` to `io.Writer` for consistency with every other writer in the package.
+- A `go test` invocation documented in the README once the tests have been verified green.
+
+### Phase 0b — Lossless parsers and missing writers *(blocks Phase 3)*
+
+**Done when:** `SaveGame`, `Cafe`, `FriendCafe`, and `CharacterJP` all round-trip byte-identically through Read → Write on real fixture files extracted from the decompiled APK.
+
+Why this is its own phase: the existing readers for these formats are *lossy*. `readSaveStrings` in `save_game.go` reads length-prefixed string arrays and throws every string away. `ReadCafe` reads a trailing `int32` count followed by that many `int32`s into nowhere (with a note-to-self comment conceding the author wasn't sure it was right). `readFoodStack` in `cafe.go` reads a byte into `f.U1`, then on `version > 24` overwrites it with a second byte — losing the first. The same function reads two consecutive strings and stores only the first. None of this is a bug in the sense of "the build pipeline is broken" — the build pipeline never round-trips these formats, so there's been no pressure to be lossless. It *is* a bug in the sense of "we cannot use this as the source of truth for the Godot client's save/load path."
+
+Fixing it means:
+
+1. For each lossy read site, add struct fields that capture the currently-discarded data.
+2. Update the reader to populate those fields instead of dropping them.
+3. Write the corresponding writer.
+4. Harden `ReadNextBytes` in `binary_reader.go` to return an error (or panic) instead of calling `log.Fatal`, so that malformed fixtures in tests fail cleanly instead of killing the test binary.
+5. Use `io.ReadFull` wherever a fixed-length read happens, to close the partial-read gap in the `io.Reader` contract.
+6. Check in binary fixtures under `tool/file_types/testdata/` — real files extracted from the decompiled APK, one per format.
+7. Extend `roundtrip_test.go` (or add per-format `*_test.go` files) to assert byte-level equality for each format against its checked-in fixture.
+
+Some of this requires going back to Ghidra and understanding what the currently-discarded fields *mean* — specifically for `SaveGame` and `Cafe`. The anchors labelled in `src/lib/cpp/ZombieCafeExtension.cpp` should put us close enough to the save/cafe serialization entry points in the original `.so` to answer that.
+
+Recommended starting point: `CharacterJP`. It has no version-conditional reads and no trailing-garbage reads, so adding `WriteCharactersJP` is the most mechanical of the four missing writers and a good rehearsal before tackling `SaveGame`.
+
+Deliverables:
+- `WriteSaveGame`, `WriteCafe`, `WriteFriendData`, `WriteCharactersJP`.
+- Additional struct fields on `SaveGame`, `Cafe`, and their sub-types to preserve data that is currently discarded.
+- `ReadNextBytes` returns an error instead of `log.Fatal`; callers updated to propagate.
+- `tool/file_types/testdata/` with one binary fixture per format.
+- Round-trip tests for all four formats passing against real fixtures.
 
 ### Phase 1 — Asset export pipeline for Godot
 
@@ -73,11 +103,13 @@ Deliverables:
 - One scene showing a static cafe tile with the character sprite overlaid.
 - CI entry (GitHub Actions) that runs `godot --headless --check-only` on every push.
 
-### Phase 3 — Save-load round-trip
+### Phase 3 — Save-load round-trip *(blocked on Phase 0b)*
 
 **Done when:** the Godot client can load a real save file produced by the legacy Android build, render the cafe layout described by it, and write it back out byte-identically. No tick simulation yet — this is purely a data path.
 
 Why this before gameplay: if the Godot client can't agree with the Go tooling on what a save file means, there's no point implementing a tick loop. This is the fidelity contract.
+
+**Blocked on Phase 0b:** byte-identical round-tripping requires `SaveGame`, `Cafe`, and `FriendCafe` to have lossless parsers and matching writers. The current readers discard bytes in several places (see Phase 0b), so this phase cannot start until Phase 0b is complete.
 
 Deliverables:
 - A GDScript/C# wrapper that calls into the Go `file_types` package (via a compiled shared library, or by round-tripping through JSON).
