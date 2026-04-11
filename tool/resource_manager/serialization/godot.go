@@ -4,7 +4,6 @@ import (
 	"cctpacker/cct_file"
 	"encoding/json"
 	"file_types"
-	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -16,17 +15,16 @@ import (
 // BuildGodotAssets produces a Godot 4-friendly asset tree from the
 // extracted APK source at in_directory. The output layout is:
 //
-//	<out>/assets/data/   — JSON data files (decoded from binary where needed)
-//	<out>/assets/images/ — individual PNG files, subdirectory structure preserved
-//	<out>/assets/audio/  — OGG files (music at the top, sfx under sfx/)
-//	<out>/assets/fonts/  — TTF files
+//	<out>/assets/data/     — JSON data files (decoded from binary where needed)
+//	<out>/assets/atlases/  — packed atlas PNGs + offsets JSON (the only image source)
+//	<out>/assets/audio/    — OGG files (music at the top, sfx under sfx/)
+//	<out>/assets/fonts/    — TTF files
 //
-// Atlas packing, opaque binary file parsing (constants, enemy data,
-// per-animation keyframes, bitmap fonts), and any Godot-specific
-// import metadata emission are explicitly deferred to follow-up
-// sessions. The goal of this first pass is to produce a directory
-// Godot 4 can import without manual intervention, not to produce a
-// feature-complete runtime.
+// The Godot client reads sprites exclusively through SpriteAtlas, so
+// individual PNG files are not copied into the output tree — atlases
+// + offsets JSON are the canonical image source. This saves ~36 MB
+// on the build output versus copying every per-character part as its
+// own PNG file.
 func BuildGodotAssets(in_directory string, out_directory string) {
 	log.Printf("BuildGodotAssets: %s -> %s", in_directory, out_directory)
 
@@ -39,7 +37,6 @@ func BuildGodotAssets(in_directory string, out_directory string) {
 
 	copyGodotDataFiles(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeAnimationDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
-	copyGodotImages(in_directory, filepath.Join(assetsOut, "images"))
 	copyGodotAudio(in_directory, filepath.Join(assetsOut, "audio"))
 	copyGodotFonts(in_directory, filepath.Join(assetsOut, "fonts"))
 	packGodotAtlases(in_directory, filepath.Join(assetsOut, "atlases"))
@@ -247,40 +244,6 @@ func deserializeAnimationDataForGodot(in_directory string, out_data_directory st
 	godotMkdir(filepath.Dir(dst))
 	if err := os.WriteFile(dst, b, 0644); err != nil {
 		log.Fatalf("writing %s: %v", dst, err)
-	}
-}
-
-// copyGodotImages walks src/assets/images/ and copies every *.png file
-// into the Godot images/ tree, preserving the subdirectory structure.
-// No atlas packing is performed in this first pass — each character part,
-// food item, and furniture sprite is emitted as its own PNG, which Godot
-// imports natively via its built-in PNG importer.
-func copyGodotImages(in_directory string, out_directory string) {
-	in_images := filepath.Join(in_directory, "assets", "images")
-	godotMkdir(out_directory)
-
-	err := filepath.WalkDir(in_images, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(strings.ToLower(d.Name()), ".png") {
-			return nil
-		}
-
-		rel, err := filepath.Rel(in_images, path)
-		if err != nil {
-			return err
-		}
-		dst := filepath.Join(out_directory, rel)
-		godotMkdir(filepath.Dir(dst))
-		godotCopyFile(path, dst)
-		return nil
-	})
-	if err != nil {
-		log.Fatalf("walking images: %v", err)
 	}
 }
 
