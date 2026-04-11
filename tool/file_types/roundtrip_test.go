@@ -658,6 +658,78 @@ func findRepoRoot(t *testing.T) string {
 	return ""
 }
 
+// TestEnemyItemDataRoundTrip exercises the ReadEnemyItemData /
+// WriteEnemyItemData pair against the real src/assets/data/
+// enemyItemData.bin.mid file. The file is 321 bytes with a clean
+// (1-byte count + count × 16 bytes) layout — the parser should
+// round-trip it byte-identically, and a fixture test with
+// non-default values catches reader-writer asymmetry.
+func TestEnemyItemDataRoundTrip(t *testing.T) {
+	repoRoot := findRepoRoot(t)
+	path := filepath.Join(repoRoot, "src", "assets", "data", "enemyItemData.bin.mid")
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("fixture not present at %s: %v", path, err)
+	}
+
+	parsed := ReadEnemyItemData(bytes.NewReader(raw))
+
+	var buf bytes.Buffer
+	WriteEnemyItemData(&buf, parsed)
+
+	if !bytes.Equal(raw, buf.Bytes()) {
+		t.Fatalf("enemyItemData round-trip differs (orig %d bytes, got %d)",
+			len(raw), buf.Len())
+	}
+
+	// Sanity: the structural invariant we committed to at implementation
+	// time. If this fires, it means either the count byte was misread
+	// or a real file was dropped in that doesn't match the 20-item layout.
+	if parsed.Count != 20 {
+		t.Errorf("enemyItemData.Count = %d, expected 20", parsed.Count)
+	}
+	if len(parsed.Records) != 20 {
+		t.Errorf("enemyItemData.Records len = %d, expected 20", len(parsed.Records))
+	}
+	for i, r := range parsed.Records {
+		if len(r) != EnemyItemRecordWidth {
+			t.Errorf("record[%d] width = %d, expected %d",
+				i, len(r), EnemyItemRecordWidth)
+		}
+	}
+}
+
+func TestEnemyItemDataInMemoryFixture(t *testing.T) {
+	fixture := EnemyItemData{
+		Count: 3,
+		Records: [][]byte{
+			{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10},
+			{0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20},
+			{0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa, 0xf9, 0xf8, 0xf7, 0xf6, 0xf5, 0xf4, 0xf3, 0xf2, 0xf1, 0xf0},
+		},
+	}
+
+	var buf bytes.Buffer
+	WriteEnemyItemData(&buf, fixture)
+
+	parsed := ReadEnemyItemData(bytes.NewReader(buf.Bytes()))
+
+	if parsed.Count != fixture.Count {
+		t.Errorf("Count mismatch: got %d, want %d", parsed.Count, fixture.Count)
+	}
+	if len(parsed.Records) != len(fixture.Records) {
+		t.Fatalf("record count: got %d, want %d",
+			len(parsed.Records), len(fixture.Records))
+	}
+	for i := range fixture.Records {
+		if !bytes.Equal(parsed.Records[i], fixture.Records[i]) {
+			t.Errorf("record[%d] mismatch:\n  got %x\n  want %x",
+				i, parsed.Records[i], fixture.Records[i])
+		}
+	}
+}
+
 // TestAnimationFileKeyframeCountHypothesis spot-checks the semantic
 // label committed at design time: Prologue.KeyframeCount should be
 // small for static poses (sit) and in the 20-60 range for full

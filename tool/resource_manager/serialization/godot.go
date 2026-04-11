@@ -37,6 +37,7 @@ func BuildGodotAssets(in_directory string, out_directory string) {
 
 	copyGodotDataFiles(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeAnimationDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
+	deserializeEnemyItemDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	copyGodotAudio(in_directory, filepath.Join(assetsOut, "audio"))
 	copyGodotFonts(in_directory, filepath.Join(assetsOut, "fonts"))
 	packGodotAtlases(in_directory, filepath.Join(assetsOut, "atlases"))
@@ -218,6 +219,28 @@ func copyGodotDataFiles(in_directory string, out_directory string) {
 		dst := filepath.Join(out_directory, friendly)
 		godotCopyFile(src, dst)
 	}
+}
+
+// deserializeEnemyItemDataForGodot decodes src/assets/data/enemyItemData.bin.mid
+// using ReadEnemyItemData and writes a pretty-printed JSON version to
+// <out>/assets/data/enemyItemData.json. Missing source logs and returns
+// rather than failing the build — matches the tolerance pattern of
+// deserializeAnimationDataForGodot.
+func deserializeEnemyItemDataForGodot(in_directory string, out_data_directory string) {
+	src := filepath.Join(in_directory, "assets", "data", "enemyItemData.bin.mid")
+	dst := filepath.Join(out_data_directory, "enemyItemData.json")
+
+	f, err := os.Open(src)
+	if err != nil {
+		log.Printf("enemyItemData not present at %s: %v (skipping)", src, err)
+		return
+	}
+	defer f.Close()
+
+	data := file_types.ReadEnemyItemData(f)
+
+	godotMkdir(filepath.Dir(dst))
+	writeJSONFile(dst, data)
 }
 
 // deserializeAnimationDataForGodot decodes src/assets/data/animationData.bin.mid
