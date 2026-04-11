@@ -1,6 +1,6 @@
 # Session Handoff — Zombie Cafe Revival
 
-**Last updated:** 2026-04-12 (after the megasession)
+**Last updated:** 2026-04-12 (after the IAP bypass session; previous: after the megasession earlier the same day)
 **Purpose:** quick orientation for a fresh session. Self-contained; read this plus `docs/devlog/2026-04-12-megasession-wrap.md` and `docs/rewrite-plan.md` and you should be able to continue without re-reading the full devlog history.
 
 ---
@@ -25,6 +25,8 @@ Eleven devlog entries from 2026-04-11 plus one megasession entry from 2026-04-12
 - **Phase 3 (unblocked, not started):** save-load round-trip inside the Godot client. Was gated on Phase 0b closure; now possible.
 
 **Legacy APK on hardware works.** `libZombieCafeExtension.so` builds cleanly from source via NDK-bundled CMake+Ninja and includes a new runtime patch that NOPs out `Java_com_capcom_zombiecafeandroid_SoundManager_setEnabled` to dodge a modern-Android broadcast-receiver race. The game boots, plays music, and survives for several minutes before hitting `Scudo: corrupted chunk header` aborts (legacy heap bugs detected by modern Android's hardened allocator — not blocking fixture extraction).
+
+**Legacy APK toxin IAP is bypassed for unlimited late-game access.** `src/smali/com/capcom/billing/SmurfsBilling.smali` has been patched so that any triggered-by-low-toxin slot pick fakes a successful purchase — `onCreate` reads the `ItemName0` Intent extra, calls `ZombieCafeAndroid.boughtToxin(productID)` to fire the normal success callback path (which credits toxin via `PurchaseAndroidToxin`), and immediately `finish()`s. `doFinish` and `onDestroy` are also null-safe-ified since the `BillingService` fields they normally touch are no longer initialized. `ZombieCafeAndroid.BuyToxin` is unchanged so the full startActivity → onPause → Activity → onResume cycle fires cleanly and the native game's "waiting for purchase" dim state clears on its own. The HUD toxin icon ("store page" entry point) still does nothing — confirmed via smali probe instrumentation that the native `BUTTON_ADDTOXIN` handler is pure native code with zero JNI calls, so Java patching can't fix that path; future work there requires Ghidra on `libZombieCafeAndroid.so`. See `docs/superpowers/specs/2026-04-12-iap-debug-bypass-design.md` for the full design, Findings section, and follow-up notes.
 
 **Nothing is broken.** Full workspace builds clean (`file_types`, `resource_manager`, `build_tool`, `cctpacker` native; `server` under `GOOS=js GOARCH=wasm`). All tests green. Headless Godot validation passes.
 
@@ -61,13 +63,16 @@ The game boots and runs, but hits `Scudo: corrupted chunk header` aborts after s
 
 ## Environment
 
-Neither Go nor Godot is on `PATH` in Git Bash. Always invoke via full path.
+Neither Go, Godot, nor `adb` is on `PATH` in Git Bash. Always invoke via full path.
 
 | Tool | Full path |
 |---|---|
 | Go 1.26.2 | `/c/Program Files/Go/bin/go.exe` |
 | Godot 4.6.2 (console) | `/c/Users/edwar/AppData/Local/Microsoft/WinGet/Packages/GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe/Godot_v4.6.2-stable_win64_console.exe` |
 | Godot 4.6.2 (GUI) | same dir, `Godot_v4.6.2-stable_win64.exe` |
+| `adb` (Android Platform Tools) | `/c/Users/edwar/AppData/Local/Android/Sdk/platform-tools/adb.exe` |
+
+`apktool` and `jarsigner` **are** on `PATH` in Git Bash and can be invoked directly.
 
 Git user: **Edward Yang**. Main branch: **main**. Repo root: `/c/Users/edwar/edbuildingstuff/zombie-cafe-revival`.
 
@@ -135,13 +140,16 @@ done
 - **`server` module only builds for wasm.** It targets Cloudflare Workers and imports `syscall/js`, which has `//go:build js` guards. Native build fails with "build constraints exclude all Go files in syscall/js" — this is expected, build with `GOOS=js GOARCH=wasm` instead.
 - **No fixture files for `Cafe`/`FriendCafe`/`SaveGame`.** All their round-trip tests use in-memory constructed fixtures. Real binary fixtures are a pending Phase 0b item.
 - **The pre-existing `cct_file.WritePackedTexture` has ~15 debug prints** that spam stdout whenever the atlas packer runs. Marked as a Phase 1b polish item; not touched yet because it's shared between legacy APK and Godot build paths.
+- **`adb install -r` does not restart a running game instance.** The APK on disk is replaced but the running process keeps running the old dex bytes. Always `adb shell am force-stop com.capcom.zombiecafeandroid` before `adb shell am start -n com.capcom.zombiecafeandroid/.ZombieCafeAndroid` when testing a new smali patch — otherwise you'll think your edit didn't apply. Confirm the process is actually dead with `adb shell pidof com.capcom.zombiecafeandroid` (exit code 1 = dead).
+- **The `SmurfsBilling` IAP bypass depends on `BuyToxin` staying unchanged.** Don't patch `BuyToxin` directly — the native game's shopping state machine requires the full startActivity → onPause → SmurfsBilling Activity → onResume cycle to clear its dim "waiting for purchase" overlay, and shortcutting that path credits toxin but leaves the game frozen until the user hits the Android back button. The SmurfsBilling-only patch avoids this by letting the Activity swap happen cleanly and just short-circuiting the Activity's body. See `docs/superpowers/specs/2026-04-12-iap-debug-bypass-design.md` Findings section for the full story of why the obvious approach is wrong.
 
 ---
 
-## Preferences recorded
+## Preferences and durable findings recorded
 
-One memory file at `memory/feedback_commit_style.md`:
-- **Always produce one grouped commit message per session**, not split options. Don't offer "three commits or one" footers.
+Memory files under `memory/`:
+- **`feedback_commit_style.md`** — always produce one grouped commit message per session, not split options. Don't offer "three commits or one" footers.
+- **`project_iap_bypass_findings.md`** — the full story of what works and what doesn't for legacy APK IAP bypassing. Read before any future IAP-related smali patching or any attempt to fix the HUD toxin icon. Covers both the `SmurfsBilling.onCreate` approach (chosen, shipped) and the `BuyToxin` direct-call alternative (confirmed working with a back-button-dismissible dim wart; documented for revert), plus the probe experiment that conclusively rules out Java-side fixes for the HUD store icon.
 
 ---
 
@@ -151,5 +159,6 @@ One memory file at `memory/feedback_commit_style.md`:
 - `docs/devlog/2026-04-11-kickoff.md` — why Godot over the other rewrite paths
 - `docs/devlog/2026-04-11-phase-0a-findings.md` — the lossy-reader surprise that shaped the morning
 - `docs/devlog/2026-04-11-phase-2a-sprite-atlas.md` — latest, most relevant for continuing Phase 2b
+- `docs/superpowers/specs/2026-04-12-iap-debug-bypass-design.md` + `docs/superpowers/plans/2026-04-12-iap-debug-bypass.md` — the IAP bypass design, Findings, and implementation plan. Only relevant if you need to touch the legacy APK's billing path or revisit the HUD store icon.
 
 Ten devlog entries total under `docs/devlog/` — read them chronologically for the full story, or jump to the latest two or three for context on the immediate next step.
