@@ -1,11 +1,10 @@
 ; Engine configuration file.
-; Minimal Godot 4 project used to validate that the asset tree
-; produced by `go run ./tool/build_tool -target godot` is importable
-; by Godot's built-in importers without manual intervention.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
 ;
-; This is a scaffold — not the real Godot client. It exists so the
-; Phase 1 asset builder's output can be tested against actual Godot
-; behavior instead of relying on "this should work" claims.
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
@@ -13,3 +12,4 @@ config_version=5
 
 config/name="Zombie Cafe Revival — Asset Validation"
 config/description="Phase 1 asset tree import validation scaffold."
+config/features=PackedStringArray("4.6")

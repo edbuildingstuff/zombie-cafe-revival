@@ -99,14 +99,27 @@ Pending work:
 7. *(pending, cosmetic)* Copy social icons and EULA/help HTML from `src/assets/data/` if the Godot client needs them.
 8. *(pending, size optimization)* Replace individual PNG copies with atlas-only output once Phase 2 confirms the Godot client reads atlases exclusively. Saves ~30 MB on the tree.
 
-### Phase 2 — Godot project scaffold
+### Phase 2a — Godot project scaffold and first client code *(done)*
 
-**Done when:** opening `godot/project.godot` in Godot 4 shows the cafe background, a player character sprite, and a rendered test UI, with nothing hardcoded beyond a "hello world" scene. No gameplay yet.
+**Done when:** a tracked Godot 4 project exists, the Phase 1 asset tree imports cleanly under Godot's built-in importers, and the first reusable piece of game code can load a packed atlas + offsets JSON and surface named `AtlasTexture` regions at runtime.
 
-Deliverables:
-- `godot/project.godot` with import settings tuned for the exported assets.
-- One scene showing a static cafe tile with the character sprite overlaid.
-- CI entry (GitHub Actions) that runs `godot --headless --check-only` on every push.
+Landed:
+- *(done)* `godot/project.godot` — minimal Godot 4.6-targeted project file. No scenes or startup scripts; exists so the directory is recognized as a project.
+- *(done)* `godot/assets/` — 5.5 MB of representative sample files copied from `build_godot/` (3 data JSON, 3 individual character PNGs, 2 atlas PNGs + 3 JSON manifests, 1 TTF, 2 OGGs). Tracked for reproducibility of the validation script.
+- *(done)* `godot/validate_assets.gd` — headless `SceneTree`-based validation script. Exercises every asset category the Phase 1 builder emits: JSON parse (data files + atlas manifests), `Texture2D` load (individual PNGs + atlas PNGs), `FontFile` load, `AudioStream` load. Exits 0 on success, 1 on any failure. Reusable as a regression test.
+- *(done)* `godot/scripts/sprite_atlas.gd` — first reusable piece of real Godot client code. A `SpriteAtlas` `class_name` exposing `load_from(atlas_png, offsets_json, character_art_json="")`, `get_region(key)`, `get_character_pieces(character_name)`, and draw-offset lookups. Handles both character atlases (keyed by composite `"<character>/<part>"`) and plain texture atlases (keyed by bare `"<part>"`). The composite-key model was forced by the discovery that naive bare-name keying silently collapses 3,051 character-part entries down to 27 when every character shares the same part filenames.
+- *(done)* Extended `validate_assets.gd` with end-to-end `SpriteAtlas` tests for both `characterParts.png` and `furniture.png`. Exercises the character atlas's 3,051-region count, retrieves all 27 `AtlasTexture` objects for `boxer-human` via `get_character_pieces`, confirms the grouping math is right.
+- *(done, first run)* Godot 4.6.2 installed via winget (`GodotEngine.GodotEngine`). Binary at `%LOCALAPPDATA%\Microsoft\WinGet\Packages\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\`. Full 14-check validation pass confirmed against the real installed Godot runtime.
+
+### Phase 2b — Visible rendered scene *(in progress)*
+
+**Done when:** opening `godot/project.godot` in Godot 4 shows a rendered character sprite assembled from its `SpriteAtlas` pieces. A visible artifact proves the rendering path, not just the import path.
+
+Pending:
+- *(pending)* `godot/main.tscn` — a minimal scene with a `Sprite2D` (or `Node2D` + multiple `Sprite2D` children) that uses `SpriteAtlas.get_character_pieces("boxer-human")` to layer all 27 pieces into a visible character.
+- *(pending)* A GitHub Actions CI entry that runs `godot --headless --path godot/ --script res://validate_assets.gd` on every push, catching any asset builder regression immediately.
+- *(pending, optimization)* Per-character index in `SpriteAtlas.get_character_pieces` — current impl does a linear scan of the regions dict per call, fine for one-off lookups but not for hot loops. Precompute a `Dictionary[String, Array[AtlasTexture]]` once during load.
+- *(pending, future)* Cafe background. Blocked on the `mapTiles` texture packer being enabled (currently commented out in the legacy `build_tool/main.go`).
 
 ### Phase 3 — Save-load round-trip *(blocked on Phase 0b)*
 

@@ -29,6 +29,9 @@ func _init() -> void:
 	failures += _validate_audio("res://assets/audio/Zombie Theme V1.ogg")
 	failures += _validate_audio("res://assets/audio/sfx/blender.ogg")
 
+	failures += _validate_character_atlas()
+	failures += _validate_texture_atlas()
+
 	if failures.is_empty():
 		print("\n========== VALIDATION PASSED ==========")
 		print("All asset categories load and parse as expected.")
@@ -106,4 +109,111 @@ func _validate_audio(path: String) -> Array:
 
 	var duration := stream.get_length()
 	print("  OK audio(", "%.2f" % duration, "s): ", path)
+	return []
+
+# SpriteAtlas end-to-end test: load the character atlas via
+# SpriteAtlas.load_from, assert the region count is proportional to
+# characters × pieces (not collapsed by name collisions), retrieve a
+# specific region by its composite key, and pull all pieces for a
+# known character via get_character_pieces. Proves the offsets JSON
+# shape the Go build tool emits maps correctly to AtlasTexture
+# sub-region cropping at Godot runtime AND that the character-to-
+# piece grouping math is right.
+func _validate_character_atlas() -> Array:
+	var atlas := SpriteAtlas.load_from(
+		"res://assets/atlases/characterParts.png",
+		"res://assets/atlases/characterParts.offsets.json",
+		"res://assets/atlases/characterParts.characterArt.json"
+	)
+
+	if atlas == null:
+		return ["SpriteAtlas.load_from returned null for characterParts"]
+
+	if atlas.regions.is_empty():
+		return ["characterParts SpriteAtlas has zero regions"]
+
+	if atlas.character_names.is_empty():
+		return ["characterParts SpriteAtlas has zero character names"]
+
+	if atlas.pieces_per_character <= 0:
+		return ["characterParts SpriteAtlas pieces_per_character is " + str(atlas.pieces_per_character)]
+
+	# Sanity check: the region dict should have approximately
+	# character_count × pieces_per_character entries, not just
+	# pieces_per_character (which would indicate name collisions).
+	var expected := atlas.character_names.size() * atlas.pieces_per_character
+	if atlas.regions.size() < expected / 2:
+		return [
+			"characterParts SpriteAtlas looks collapsed: expected ~"
+			+ str(expected) + " regions, got " + str(atlas.regions.size())
+		]
+
+	# Grab the first non-degenerate region via composite key lookup.
+	var first_key := ""
+	var first_region: AtlasTexture = null
+	for key in atlas.region_keys():
+		var candidate: AtlasTexture = atlas.get_region(key)
+		if candidate != null and candidate.region.size.x > 0 and candidate.region.size.y > 0:
+			first_key = key
+			first_region = candidate
+			break
+
+	if first_region == null:
+		return ["characterParts SpriteAtlas has no non-degenerate regions"]
+
+	if first_region.atlas != atlas.source:
+		return ["characterParts region atlas reference mismatch"]
+
+	# Pull the entire piece list for boxer-human (known to exist in the
+	# sample) and confirm it returns exactly pieces_per_character entries.
+	var boxer_pieces := atlas.get_character_pieces("boxer-human")
+	if boxer_pieces.size() != atlas.pieces_per_character:
+		return [
+			"get_character_pieces('boxer-human') returned "
+			+ str(boxer_pieces.size()) + " entries, expected "
+			+ str(atlas.pieces_per_character)
+		]
+
+	print("  OK SpriteAtlas(chars): ",
+		atlas.regions.size(), " regions, ",
+		atlas.character_names.size(), " characters, ",
+		atlas.pieces_per_character, " pieces each")
+	print("    first non-degenerate key '", first_key, "' at ", first_region.region)
+	print("    get_character_pieces('boxer-human') -> ", boxer_pieces.size(), " AtlasTextures")
+	return []
+
+func _validate_texture_atlas() -> Array:
+	var atlas := SpriteAtlas.load_from(
+		"res://assets/atlases/furniture.png",
+		"res://assets/atlases/furniture.offsets.json"
+	)
+
+	if atlas == null:
+		return ["SpriteAtlas.load_from returned null for furniture"]
+
+	if atlas.regions.is_empty():
+		return ["furniture SpriteAtlas has zero regions"]
+
+	# Character art should be empty for a non-character atlas.
+	if not atlas.character_names.is_empty():
+		return ["furniture SpriteAtlas unexpectedly has character names"]
+
+	var first_key := ""
+	var first_region: AtlasTexture = null
+	for key in atlas.region_keys():
+		var candidate: AtlasTexture = atlas.get_region(key)
+		if candidate != null and candidate.region.size.x > 0 and candidate.region.size.y > 0:
+			first_key = key
+			first_region = candidate
+			break
+
+	if first_region == null:
+		return ["furniture SpriteAtlas has no non-degenerate regions"]
+
+	if first_region.atlas != atlas.source:
+		return ["furniture region atlas reference mismatch"]
+
+	print("  OK SpriteAtlas(furn): ",
+		atlas.regions.size(), " regions (no character art)")
+	print("    first non-degenerate key '", first_key, "' at ", first_region.region)
 	return []
