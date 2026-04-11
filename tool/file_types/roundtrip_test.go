@@ -669,6 +669,34 @@ func TestRealCafeFixturesRoundTrip(t *testing.T) {
 	}
 }
 
+// TestRealFriendCafeFixturesRoundTrip exercises ReadFriendData/
+// WriteFriendData against the real ServerData.dat pulled from the
+// device. ServerData.dat's initial bytes (0x3f version + float64
+// -1.0 for CafeState.U1) exactly match the FriendCafe header, and
+// its 20,747-byte size is roughly Cafe-sized (~20 KB) plus a small
+// SaveGame-like state header — consistent with FriendCafe's layout
+// of { byte Version, CafeState State, Cafe Cafe }. The file
+// represents the last-cached friend cafe downloaded from the server
+// during a raid.
+func TestRealFriendCafeFixturesRoundTrip(t *testing.T) {
+	repoRoot := findRepoRoot(t)
+	path := filepath.Join(repoRoot, "tool", "file_types", "testdata", "ServerData.dat")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("fixture not present at %s: %v", path, err)
+	}
+
+	parsed := ReadFriendData(bytes.NewReader(raw))
+
+	var buf bytes.Buffer
+	WriteFriendData(&buf, parsed)
+
+	if !bytes.Equal(raw, buf.Bytes()) {
+		t.Fatalf("ServerData.dat: round-trip bytes differ (orig %d, got %d)",
+			len(raw), buf.Len())
+	}
+}
+
 // TestRealSaveGameFixturesRoundTrip does the same for SaveGame-shaped
 // fixtures pulled from the same device. globalData.dat and BACKUP*.dat
 // are the candidates based on filename convention (the .dat files are
