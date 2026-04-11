@@ -296,15 +296,7 @@
 
 # virtual methods
 .method protected doFinish()V
-    .locals 1
-
-    iget-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->i:Lcom/capcom/billing/e;
-
-    invoke-virtual {v0}, Lcom/capcom/billing/e;->a()V
-
-    iget-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->e:Lcom/capcom/billing/BillingService;
-
-    invoke-virtual {v0}, Lcom/capcom/billing/BillingService;->b()V
+    .locals 0
 
     invoke-virtual {p0}, Lcom/capcom/billing/SmurfsBilling;->finish()V
 
@@ -430,287 +422,46 @@
 .end method
 
 .method public onCreate(Landroid/os/Bundle;)V
-    .locals 10
-
-    const/4 v9, 0x1
-
-    const/4 v1, 0x0
-
-    const/4 v8, 0x2
+    .locals 2
 
     invoke-super {p0, p1}, Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V
+
+    const-string v0, "SmurfsBilling bypass"
+
+    const-string v1, "onCreate - faking purchase success"
+
+    invoke-static {v0, v1}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
 
     invoke-virtual {p0}, Lcom/capcom/billing/SmurfsBilling;->getIntent()Landroid/content/Intent;
 
     move-result-object v0
 
+    if-eqz v0, :cond_0
+
     invoke-virtual {v0}, Landroid/content/Intent;->getExtras()Landroid/os/Bundle;
 
-    move-result-object v2
+    move-result-object v0
 
-    const-string v0, "InApp Billing"
+    if-eqz v0, :cond_0
 
-    const-string v3, "Extra data from smurfs"
+    const-string v1, "ItemName0"
 
-    invoke-static {v0, v3}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
+    invoke-virtual {v0, v1}, Landroid/os/Bundle;->getString(Ljava/lang/String;)Ljava/lang/String;
 
-    const-string v0, "============="
+    move-result-object v0
 
-    const-string v3, "======================"
+    if-eqz v0, :cond_0
 
-    invoke-static {v0, v3}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
+    const-string v1, "SmurfsBilling bypass"
 
-    if-eqz v2, :cond_0
+    invoke-static {v1, v0}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
 
-    const-string v0, "NumberOfItems"
-
-    invoke-virtual {v2, v0}, Landroid/os/Bundle;->getInt(Ljava/lang/String;)I
-
-    move-result v0
-
-    sput v0, Lcom/capcom/billing/SmurfsBilling;->b:I
-
-    move v0, v1
-
-    :goto_0
-    sget v3, Lcom/capcom/billing/SmurfsBilling;->b:I
-
-    if-lt v0, v3, :cond_2
+    invoke-static {v0}, Lcom/capcom/zombiecafeandroid/ZombieCafeAndroid;->boughtToxin(Ljava/lang/String;)V
 
     :cond_0
-    const/high16 v0, 0x7f030000
+    invoke-virtual {p0}, Lcom/capcom/billing/SmurfsBilling;->finish()V
 
-    invoke-virtual {p0, v0}, Lcom/capcom/billing/SmurfsBilling;->setContentView(I)V
-
-    new-instance v0, Landroid/os/Handler;
-
-    invoke-direct {v0}, Landroid/os/Handler;-><init>()V
-
-    iput-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->d:Landroid/os/Handler;
-
-    new-instance v0, Lcom/capcom/billing/q;
-
-    iget-object v2, p0, Lcom/capcom/billing/SmurfsBilling;->d:Landroid/os/Handler;
-
-    invoke-direct {v0, p0, v2}, Lcom/capcom/billing/q;-><init>(Lcom/capcom/billing/SmurfsBilling;Landroid/os/Handler;)V
-
-    iput-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->c:Lcom/capcom/billing/q;
-
-    const-string v0, "IAP"
-
-    const-string v2, "added smurfs purchase observer"
-
-    invoke-static {v0, v2}, Landroid/util/Log;->v(Ljava/lang/String;Ljava/lang/String;)I
-
-    new-instance v0, Lcom/capcom/billing/BillingService;
-
-    invoke-direct {v0}, Lcom/capcom/billing/BillingService;-><init>()V
-
-    iput-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->e:Lcom/capcom/billing/BillingService;
-
-    iget-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->e:Lcom/capcom/billing/BillingService;
-
-    invoke-virtual {v0, p0}, Lcom/capcom/billing/BillingService;->a(Landroid/content/Context;)V
-
-    const-string v0, "IAP"
-
-    const-string v2, "created billing service"
-
-    invoke-static {v0, v2}, Landroid/util/Log;->v(Ljava/lang/String;Ljava/lang/String;)I
-
-    new-instance v0, Lcom/capcom/billing/e;
-
-    invoke-direct {v0, p0}, Lcom/capcom/billing/e;-><init>(Landroid/content/Context;)V
-
-    iput-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->i:Lcom/capcom/billing/e;
-
-    const v0, 0x7f080002
-
-    invoke-virtual {p0, v0}, Lcom/capcom/billing/SmurfsBilling;->findViewById(I)Landroid/view/View;
-
-    move-result-object v0
-
-    check-cast v0, Landroid/widget/TextView;
-
-    iput-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->f:Landroid/widget/TextView;
-
-    new-instance v0, Lcom/capcom/billing/p;
-
-    sget-object v2, Lcom/capcom/billing/SmurfsBilling;->m:[Lcom/capcom/billing/SmurfsBilling$CatalogEntry;
-
-    invoke-direct {v0, p0, v2}, Lcom/capcom/billing/p;-><init>(Landroid/content/Context;[Lcom/capcom/billing/SmurfsBilling$CatalogEntry;)V
-
-    iput-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->p:Lcom/capcom/billing/p;
-
-    iget-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->i:Lcom/capcom/billing/e;
-
-    invoke-virtual {v0}, Lcom/capcom/billing/e;->b()Landroid/database/Cursor;
-
-    move-result-object v0
-
-    iput-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->j:Landroid/database/Cursor;
-
-    iget-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->j:Landroid/database/Cursor;
-
-    invoke-virtual {p0, v0}, Lcom/capcom/billing/SmurfsBilling;->startManagingCursor(Landroid/database/Cursor;)V
-
-    new-array v4, v8, [Ljava/lang/String;
-
-    const-string v0, "_id"
-
-    aput-object v0, v4, v1
-
-    const-string v0, "quantity"
-
-    aput-object v0, v4, v9
-
-    new-array v5, v8, [I
-
-    fill-array-data v5, :array_0
-
-    new-instance v0, Landroid/widget/SimpleCursorAdapter;
-
-    const v2, 0x7f030004
-
-    iget-object v3, p0, Lcom/capcom/billing/SmurfsBilling;->j:Landroid/database/Cursor;
-
-    move-object v1, p0
-
-    invoke-direct/range {v0 .. v5}, Landroid/widget/SimpleCursorAdapter;-><init>(Landroid/content/Context;ILandroid/database/Cursor;[Ljava/lang/String;[I)V
-
-    iput-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->h:Landroid/widget/SimpleCursorAdapter;
-
-    const v0, 0x7f080001
-
-    invoke-virtual {p0, v0}, Lcom/capcom/billing/SmurfsBilling;->findViewById(I)Landroid/view/View;
-
-    move-result-object v0
-
-    check-cast v0, Landroid/widget/ListView;
-
-    iput-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->g:Landroid/widget/ListView;
-
-    iget-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->g:Landroid/widget/ListView;
-
-    iget-object v1, p0, Lcom/capcom/billing/SmurfsBilling;->h:Landroid/widget/SimpleCursorAdapter;
-
-    invoke-virtual {v0, v1}, Landroid/widget/ListView;->setAdapter(Landroid/widget/ListAdapter;)V
-
-    const-string v0, "IAP"
-
-    const-string v1, "setup purchase data base and widgets"
-
-    invoke-static {v0, v1}, Landroid/util/Log;->v(Ljava/lang/String;Ljava/lang/String;)I
-
-    iget-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->c:Lcom/capcom/billing/q;
-
-    invoke-static {v0}, Lcom/capcom/billing/i;->a(Lcom/capcom/billing/g;)V
-
-    iget-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->e:Lcom/capcom/billing/BillingService;
-
-    invoke-virtual {v0}, Lcom/capcom/billing/BillingService;->a()Z
-
-    move-result v0
-
-    if-nez v0, :cond_3
-
-    invoke-virtual {p0, v9}, Lcom/capcom/billing/SmurfsBilling;->showDialog(I)V
-
-    :cond_1
-    :goto_1
     return-void
-
-    :cond_2
-    new-instance v3, Ljava/lang/StringBuilder;
-
-    const-string v4, "ItemName"
-
-    invoke-direct {v3, v4}, Ljava/lang/StringBuilder;-><init>(Ljava/lang/String;)V
-
-    invoke-virtual {v3, v0}, Ljava/lang/StringBuilder;->append(I)Ljava/lang/StringBuilder;
-
-    move-result-object v3
-
-    invoke-virtual {v3}, Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
-
-    move-result-object v3
-
-    invoke-virtual {v2, v3}, Landroid/os/Bundle;->getString(Ljava/lang/String;)Ljava/lang/String;
-
-    move-result-object v3
-
-    sget-object v4, Lcom/capcom/billing/SmurfsBilling;->a:[Ljava/lang/String;
-
-    aput-object v3, v4, v0
-
-    sget-object v4, Lcom/capcom/billing/SmurfsBilling;->m:[Lcom/capcom/billing/SmurfsBilling$CatalogEntry;
-
-    new-instance v5, Lcom/capcom/billing/SmurfsBilling$CatalogEntry;
-
-    sget-object v6, Lcom/capcom/billing/SmurfsBilling;->a:[Ljava/lang/String;
-
-    aget-object v6, v6, v0
-
-    sget-object v7, Lcom/capcom/billing/SmurfsBilling$Managed;->UNMANAGED:Lcom/capcom/billing/SmurfsBilling$Managed;
-
-    invoke-direct {v5, v3, v6, v7}, Lcom/capcom/billing/SmurfsBilling$CatalogEntry;-><init>(Ljava/lang/String;Ljava/lang/String;Lcom/capcom/billing/SmurfsBilling$Managed;)V
-
-    aput-object v5, v4, v0
-
-    iput-object v3, p0, Lcom/capcom/billing/SmurfsBilling;->o:Ljava/lang/String;
-
-    const-string v4, "In-App Billing PURCHASE Item"
-
-    new-instance v5, Ljava/lang/StringBuilder;
-
-    const-string v6, "SKU="
-
-    invoke-direct {v5, v6}, Ljava/lang/StringBuilder;-><init>(Ljava/lang/String;)V
-
-    invoke-virtual {v5, v3}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
-
-    move-result-object v3
-
-    invoke-virtual {v3}, Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
-
-    move-result-object v3
-
-    invoke-static {v4, v3}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I
-
-    add-int/lit8 v0, v0, 0x1
-
-    goto/16 :goto_0
-
-    :cond_3
-    const-string v0, "IAP - End of OnCreate"
-
-    const-string v1, "register response handler"
-
-    invoke-static {v0, v1}, Landroid/util/Log;->v(Ljava/lang/String;Ljava/lang/String;)I
-
-    iget-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->e:Lcom/capcom/billing/BillingService;
-
-    iget-object v1, p0, Lcom/capcom/billing/SmurfsBilling;->o:Ljava/lang/String;
-
-    iget-object v2, p0, Lcom/capcom/billing/SmurfsBilling;->l:Ljava/lang/String;
-
-    invoke-virtual {v0, v1, v2}, Lcom/capcom/billing/BillingService;->a(Ljava/lang/String;Ljava/lang/String;)Z
-
-    move-result v0
-
-    if-nez v0, :cond_1
-
-    invoke-virtual {p0, v8}, Lcom/capcom/billing/SmurfsBilling;->showDialog(I)V
-
-    goto :goto_1
-
-    nop
-
-    :array_0
-    .array-data 4
-        0x7f080009
-        0x7f08000a
-    .end array-data
 .end method
 
 .method protected onCreateDialog(I)Landroid/app/Dialog;
@@ -755,23 +506,9 @@
 .end method
 
 .method protected onDestroy()V
-    .locals 2
+    .locals 0
 
     invoke-super {p0}, Landroid/app/Activity;->onDestroy()V
-
-    iget-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->i:Lcom/capcom/billing/e;
-
-    invoke-virtual {v0}, Lcom/capcom/billing/e;->a()V
-
-    iget-object v0, p0, Lcom/capcom/billing/SmurfsBilling;->e:Lcom/capcom/billing/BillingService;
-
-    invoke-virtual {v0}, Lcom/capcom/billing/BillingService;->b()V
-
-    const-string v0, "SmurfsBilling onDestroy()"
-
-    const-string v1, "BillingService Unbind()"
-
-    invoke-static {v0, v1}, Landroid/util/Log;->v(Ljava/lang/String;Ljava/lang/String;)I
 
     return-void
 .end method
