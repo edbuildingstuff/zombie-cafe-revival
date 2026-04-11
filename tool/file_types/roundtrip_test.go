@@ -658,6 +658,66 @@ func findRepoRoot(t *testing.T) string {
 	return ""
 }
 
+// TestEnemyItemsRoundTrip exercises ReadEnemyItems/WriteEnemyItems
+// against the real enemyItems.bin.mid file. Flat string-list format
+// with a 2-byte count header.
+func TestEnemyItemsRoundTrip(t *testing.T) {
+	repoRoot := findRepoRoot(t)
+	path := filepath.Join(repoRoot, "src", "assets", "data", "enemyItems.bin.mid")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("fixture not present at %s: %v", path, err)
+	}
+
+	parsed := ReadEnemyItems(bytes.NewReader(raw))
+
+	var buf bytes.Buffer
+	WriteEnemyItems(&buf, parsed)
+
+	if !bytes.Equal(raw, buf.Bytes()) {
+		t.Fatalf("enemyItems round-trip bytes differ (orig %d, got %d)",
+			len(raw), buf.Len())
+	}
+
+	if parsed.Count != 14 {
+		t.Errorf("Count = %d, expected 14", parsed.Count)
+	}
+	if len(parsed.Strings) < 14 {
+		t.Errorf("Strings len = %d, expected many more than Count (14)",
+			len(parsed.Strings))
+	}
+	// First string should be "Cafe" based on hex dump.
+	if len(parsed.Strings) >= 1 && parsed.Strings[0] != "Cafe" {
+		t.Errorf("Strings[0] = %q, expected \"Cafe\"", parsed.Strings[0])
+	}
+}
+
+func TestEnemyItemsInMemoryFixture(t *testing.T) {
+	fixture := EnemyItems{
+		Count: 3,
+		Strings: []string{
+			"Alpha",
+			"",
+			"1_2_3_4",
+			"Beta — with UTF-8 é",
+			"",
+		},
+	}
+
+	var buf bytes.Buffer
+	WriteEnemyItems(&buf, fixture)
+
+	parsed := ReadEnemyItems(bytes.NewReader(buf.Bytes()))
+
+	if parsed.Count != fixture.Count {
+		t.Errorf("Count: got %d, want %d", parsed.Count, fixture.Count)
+	}
+	if !reflect.DeepEqual(parsed.Strings, fixture.Strings) {
+		t.Errorf("Strings mismatch:\n  got %#v\n  want %#v",
+			parsed.Strings, fixture.Strings)
+	}
+}
+
 // TestCookbookDataRoundTrip exercises ReadCookbookData/WriteCookbookData
 // against the real src/assets/data/cookbookData.bin.mid file. The file
 // is 1164 bytes holding 10 cookbook entries with length-prefixed
