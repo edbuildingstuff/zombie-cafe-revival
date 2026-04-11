@@ -1,7 +1,6 @@
 package file_types
 
 import (
-	"fmt"
 	"io"
 	"os"
 )
@@ -34,8 +33,6 @@ func ValidateFriendData(in_file io.Reader) bool {
 
 	buf := make([]byte, 1)
 	n, err := in_file.Read(buf)
-
-	fmt.Printf("Read bytes: %d\n", n)
 
 	if n == 0 && err == io.EOF {
 		return true

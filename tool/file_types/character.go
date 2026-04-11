@@ -1,7 +1,6 @@
 package file_types
 
 import (
-	"fmt"
 	"io"
 )
 
@@ -106,7 +105,6 @@ func writeSingleCharacterData(file io.Writer, data Character) {
 
 func ReadCharacters(file io.Reader) []Character {
 	num := int(ReadByte(file))
-	fmt.Println(fmt.Sprintf("Num characters: %d", num))
 	data := []Character{}
 
 	for i := 0; i < num; i++ {

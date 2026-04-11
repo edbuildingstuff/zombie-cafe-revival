@@ -1,7 +1,6 @@
 package file_types
 
 import (
-	"fmt"
 	"io"
 )
 
@@ -39,7 +38,6 @@ func readSingleFurnitureData(file io.Reader) Furniture {
 
 	furniture.UnlockLevel = ReadByte(file)
 	furniture.Name = ReadString(file)
-	fmt.Println(furniture.Name)
 	furniture.Price = ReadInt32(file)
 	furniture.PurchaseWithToxin = ReadBool(file)
 	furniture.SizeX = ReadByte(file)

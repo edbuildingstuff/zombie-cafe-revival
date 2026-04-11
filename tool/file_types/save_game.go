@@ -43,26 +43,45 @@ type CafeState struct {
 	U13              bool
 }
 
-type SaveGame struct {
-	State     CafeState
-	U14       int16
-	U15       Date
-	U16       int16
-	U17       Date
-	NumOrders int16
-	U18       byte
-	U19       byte
-	U20       bool
+// SaveStrings captures a length-prefixed string block in the save game
+// format. The encoding is unusual: the raw int16 prefix holds a value N,
+// and the block contains max(0, N-1) strings. Because both N=0 and N=1
+// decode to zero strings, the raw count must be stored explicitly — it
+// cannot be derived from len(Strings).
+type SaveStrings struct {
+	RawCount int16
+	Strings  []string
 }
 
-func readSaveStrings(file io.Reader) {
-	readShort := ReadInt16(file)
-	num := readShort - 1
+type SaveGame struct {
+	Version     byte // leading version byte, previously read into a local and lost
+	State       CafeState
+	PreStrings  SaveStrings // read between State and U15
+	U15         Date
+	PostStrings SaveStrings // read between U15 and U17
+	U17         Date
+	NumOrders   int16
+	U18         byte
+	U19         byte
+	U20         bool
+}
+
+func readSaveStrings(file io.Reader) SaveStrings {
+	var s SaveStrings
+	s.RawCount = ReadInt16(file)
+	num := int(s.RawCount) - 1
 	if num >= 0 {
 		for i := num; i >= 1; i-- {
-			ReadString(file)
+			s.Strings = append(s.Strings, ReadString(file))
 		}
+	}
+	return s
+}
 
+func writeSaveStrings(file io.Writer, s SaveStrings) {
+	WriteInt16(file, s.RawCount)
+	for _, str := range s.Strings {
+		WriteString(file, str)
 	}
 }
 
@@ -134,13 +153,13 @@ func readCafeState(file io.Reader, version int) CafeState {
 
 func readSaveGameVersion63(file io.Reader, save SaveGame) SaveGame {
 	const version = 63
-	save.State = readCafeState(file, 63)
+	save.State = readCafeState(file, version)
 
-	readSaveStrings(file)
+	save.PreStrings = readSaveStrings(file)
 
 	save.U15 = ReadDate(file)
 
-	readSaveStrings(file)
+	save.PostStrings = readSaveStrings(file)
 
 	save.U17 = ReadDate(file)
 
@@ -159,9 +178,9 @@ func readSaveGameVersion63(file io.Reader, save SaveGame) SaveGame {
 
 func ReadSaveGame(file io.Reader) SaveGame {
 	var s SaveGame
-	version := ReadByte(file)
+	s.Version = ReadByte(file)
 
-	if version == 63 {
+	if s.Version == 63 {
 		return readSaveGameVersion63(file, s)
 	}
 
@@ -224,5 +243,36 @@ func writeCafeState(file io.Writer, save CafeState, version int) {
 
 	if version > 33 {
 		WriteBool(file, save.U13)
+	}
+}
+
+func writeSaveGameVersion63(file io.Writer, save SaveGame) {
+	const version = 63
+	writeCafeState(file, save.State, version)
+
+	writeSaveStrings(file, save.PreStrings)
+
+	WriteDate(file, save.U15)
+
+	writeSaveStrings(file, save.PostStrings)
+
+	WriteDate(file, save.U17)
+
+	WriteInt16(file, save.NumOrders)
+
+	if save.NumOrders > 0 {
+		panic("WriteSaveGame: orders serialization not implemented")
+	}
+
+	WriteByte(file, save.U18)
+	WriteByte(file, save.U19)
+	WriteBool(file, save.U20)
+}
+
+func WriteSaveGame(file io.Writer, save SaveGame) {
+	WriteByte(file, save.Version)
+
+	if save.Version == 63 {
+		writeSaveGameVersion63(file, save)
 	}
 }

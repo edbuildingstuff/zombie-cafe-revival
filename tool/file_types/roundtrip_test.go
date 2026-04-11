@@ -514,6 +514,78 @@ func TestFriendCafeRoundTrip(t *testing.T) {
 	)
 }
 
+// TestSaveStringsEncoding exercises the subtract-one count boundary in
+// readSaveStrings / writeSaveStrings. The on-disk prefix N decodes to
+// max(0, N-1) strings, so N=0 and N=1 both decode to zero strings — the
+// raw count must survive the round-trip even when the string list is
+// empty, or the two cases become indistinguishable.
+func TestSaveStringsEncoding(t *testing.T) {
+	cases := []struct {
+		name     string
+		rawCount int16
+		strings  []string
+	}{
+		{"raw count 0, zero strings", 0, nil},
+		{"raw count 1, zero strings (boundary)", 1, nil},
+		{"raw count 2, one string", 2, []string{"first"}},
+		{"raw count 5, four strings", 5, []string{"a", "b", "c", "d"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			original := SaveStrings{
+				RawCount: tc.rawCount,
+				Strings:  tc.strings,
+			}
+
+			var buf bytes.Buffer
+			writeSaveStrings(&buf, original)
+
+			decoded := readSaveStrings(&buf)
+
+			if buf.Len() != 0 {
+				t.Errorf("%d unread bytes after decode", buf.Len())
+			}
+
+			if decoded.RawCount != original.RawCount {
+				t.Errorf("RawCount mismatch: got %d, want %d",
+					decoded.RawCount, original.RawCount)
+			}
+
+			if !reflect.DeepEqual(decoded.Strings, original.Strings) {
+				t.Errorf("Strings mismatch: got %#v, want %#v",
+					decoded.Strings, original.Strings)
+			}
+		})
+	}
+}
+
+func TestSaveGameRoundTrip(t *testing.T) {
+	original := SaveGame{
+		Version: 63,
+		State:   makeCafeStateFixture(),
+		PreStrings: SaveStrings{
+			RawCount: 3,
+			Strings:  []string{"pre_alpha", "pre_beta"},
+		},
+		U15: Date{Year: 2026, Month: 4, Day: 11, Hour: 14, Minute: 0, Second: 0},
+		PostStrings: SaveStrings{
+			RawCount: 2,
+			Strings:  []string{"post_solo"},
+		},
+		U17:       Date{Year: 2026, Month: 4, Day: 11, Hour: 14, Minute: 30, Second: 30},
+		NumOrders: 0,
+		U18:       7,
+		U19:       42,
+		U20:       true,
+	}
+
+	assertRoundTrip(t, "SaveGame", original,
+		func(w *bytes.Buffer, v SaveGame) { WriteSaveGame(w, v) },
+		func(r *bytes.Buffer) SaveGame { return ReadSaveGame(r) },
+	)
+}
+
 // TestAnimationDataFixture parses the real animationData.bin.mid fixture
 // from src/assets/data/ and confirms the parser consumes it cleanly and
 // produces a non-empty slice. This is the one binary fixture in the tree
