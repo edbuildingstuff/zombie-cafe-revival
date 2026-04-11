@@ -32,6 +32,12 @@ var draw_offsets: Dictionary = {}  # composite key -> Vector4(x, y, x_flipped, y
 var character_names: PackedStringArray = PackedStringArray()
 var pieces_per_character: int = 0
 
+# Per-character precomputed piece list. Populated during _load_offsets
+# so get_character_pieces() is O(1) dict lookup instead of an O(n)
+# scan of the regions dict. Only built for character atlases; stays
+# empty for plain texture atlases (furniture, recipes, etc).
+var _character_pieces_index: Dictionary = {}  # character_name -> Array[AtlasTexture]
+
 
 static func load_from(
 	atlas_png_path: String,
@@ -85,20 +91,11 @@ func character_key(character_name: String, part_name: String) -> String:
 ## For character atlases: returns an array of AtlasTexture covering
 ## every part for the named character, in pack order (back_head1,
 ## back_leftarm1, etc.). Empty array if character_name isn't in
-## the manifest. Godot 4 Dictionary preserves insertion order, so
-## iterating the regions dict yields entries in the same order the
-## Go packer emitted them.
+## the manifest. O(1) dict lookup — the index is populated during
+## _load_offsets so this method is safe to call in hot loops (e.g.,
+## per-frame pose rebuilds once animated playback lands).
 func get_character_pieces(character_name: String) -> Array:
-	if character_names.find(character_name) < 0:
-		return []
-
-	var prefix := character_name + "/"
-	var result: Array = []
-	for key in regions:
-		var key_str := key as String
-		if key_str.begins_with(prefix):
-			result.append(regions[key_str])
-	return result
+	return _character_pieces_index.get(character_name, [])
 
 
 func _load_offsets(path: String) -> bool:
@@ -142,10 +139,12 @@ func _load_offsets(path: String) -> bool:
 			h = 0
 
 		var key := part_name
+		var char_name := ""
 		if is_character_atlas:
 			var char_idx := i / pieces_per_character
 			if char_idx < character_names.size():
-				key = character_names[char_idx] + "/" + part_name
+				char_name = character_names[char_idx]
+				key = char_name + "/" + part_name
 			else:
 				# More entries than character_names × pieces — extra
 				# entries belong to no character. Fall back to a
@@ -163,6 +162,15 @@ func _load_offsets(path: String) -> bool:
 			entry.get("XOffsetFlipped", 0),
 			entry.get("YOffsetFlipped", 0)
 		)
+
+		# Populate the per-character index during the same pass.
+		# char_name stays empty for non-character atlases and for
+		# overflow entries that fell into the _unassigned namespace,
+		# so those are naturally excluded from the index.
+		if char_name != "":
+			if not _character_pieces_index.has(char_name):
+				_character_pieces_index[char_name] = []
+			(_character_pieces_index[char_name] as Array).append(region)
 
 	return true
 

@@ -175,12 +175,41 @@ func _validate_character_atlas() -> Array:
 			+ str(atlas.pieces_per_character)
 		]
 
+	# Second character check: pin down the invariant that different
+	# characters get distinct piece arrays (not accidentally shared
+	# state between characters). cowboy-human is known to exist in
+	# the sample. This is the characterization test for the pending
+	# refactor from linear-scan to precomputed dictionary index.
+	var cowboy_pieces := atlas.get_character_pieces("cowboy-human")
+	if cowboy_pieces.size() != atlas.pieces_per_character:
+		return [
+			"get_character_pieces('cowboy-human') returned "
+			+ str(cowboy_pieces.size()) + " entries, expected "
+			+ str(atlas.pieces_per_character)
+		]
+
+	# Distinctness: boxer's first piece and cowboy's first piece
+	# must point at different AtlasTextures — if they don't, the
+	# index is accidentally collapsing state across characters.
+	if boxer_pieces[0] == cowboy_pieces[0]:
+		return ["boxer-human and cowboy-human returned the same first AtlasTexture — piece arrays collapsed"]
+
+	# Unknown-character check: a name not in character_names must
+	# return an empty array, not nil. Pins the graceful-miss contract.
+	var missing_pieces := atlas.get_character_pieces("not-a-real-character")
+	if missing_pieces.size() != 0:
+		return [
+			"get_character_pieces('not-a-real-character') returned "
+			+ str(missing_pieces.size()) + " entries, expected 0"
+		]
+
 	print("  OK SpriteAtlas(chars): ",
 		atlas.regions.size(), " regions, ",
 		atlas.character_names.size(), " characters, ",
 		atlas.pieces_per_character, " pieces each")
 	print("    first non-degenerate key '", first_key, "' at ", first_region.region)
-	print("    get_character_pieces('boxer-human') -> ", boxer_pieces.size(), " AtlasTextures")
+	print("    boxer-human -> ", boxer_pieces.size(), " pieces, cowboy-human -> ",
+		cowboy_pieces.size(), " pieces, unknown -> ", missing_pieces.size())
 	return []
 
 func _validate_texture_atlas() -> Array:
