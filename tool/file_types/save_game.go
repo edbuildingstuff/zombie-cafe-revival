@@ -64,6 +64,16 @@ type SaveGame struct {
 	U18         byte
 	U19         byte
 	U20         bool
+
+	// Trailing preserves any bytes that appear after the known struct
+	// fields. The real binary save files pulled from the legacy Android
+	// build (see tool/file_types/testdata/globalData.dat) contain ~1 KB
+	// of additional data past U20 — probably an extended character /
+	// friend list — that the current parser can't decode structurally.
+	// Storing the remainder as opaque bytes keeps the Phase 0b round-trip
+	// contract intact while the schema work is deferred. In-memory fixture
+	// tests leave this empty and the writer skips the emission when it is.
+	Trailing []byte
 }
 
 func readSaveStrings(file io.Reader) SaveStrings {
@@ -173,6 +183,18 @@ func readSaveGameVersion63(file io.Reader, save SaveGame) SaveGame {
 	save.U19 = ReadByte(file)
 	save.U20 = ReadBool(file)
 
+	// Preserve any trailing bytes the struct doesn't know about.
+	// Keep Trailing nil (rather than empty slice) when there are none
+	// so hand-constructed in-memory fixtures whose Trailing is unset
+	// still compare equal after round-trip via reflect.DeepEqual.
+	trailing, err := io.ReadAll(file)
+	if err != nil {
+		panic(err)
+	}
+	if len(trailing) > 0 {
+		save.Trailing = trailing
+	}
+
 	return save
 }
 
@@ -267,6 +289,12 @@ func writeSaveGameVersion63(file io.Writer, save SaveGame) {
 	WriteByte(file, save.U18)
 	WriteByte(file, save.U19)
 	WriteBool(file, save.U20)
+
+	if len(save.Trailing) > 0 {
+		if _, err := file.Write(save.Trailing); err != nil {
+			panic(err)
+		}
+	}
 }
 
 func WriteSaveGame(file io.Writer, save SaveGame) {

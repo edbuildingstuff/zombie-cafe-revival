@@ -632,6 +632,77 @@ func TestAnimationDataFixture(t *testing.T) {
 	}
 }
 
+// TestRealCafeFixturesRoundTrip exercises the Cafe reader+writer against
+// the real binary cafe files pulled from a modern ARM Android device
+// running the legacy patched APK. The device-side files live in the
+// app's private storage at /data/data/com.capcom.zombiecafeandroid/files/
+// and are the first real-world fixtures for the Phase 0b preservation
+// contract. Any byte that doesn't round-trip under ReadCafe→WriteCafe
+// is a parser bug in file_types.
+func TestRealCafeFixturesRoundTrip(t *testing.T) {
+	repoRoot := findRepoRoot(t)
+
+	cases := []string{
+		"playerCafe.caf",
+		"BACKUP1.caf",
+	}
+
+	for _, name := range cases {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(repoRoot, "tool", "file_types", "testdata", name)
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Skipf("fixture not present at %s: %v", path, err)
+			}
+
+			parsed := ReadCafe(bytes.NewReader(raw))
+
+			var buf bytes.Buffer
+			WriteCafe(&buf, parsed)
+
+			if !bytes.Equal(raw, buf.Bytes()) {
+				t.Fatalf("%s: round-trip bytes differ (orig %d, got %d)",
+					name, len(raw), buf.Len())
+			}
+		})
+	}
+}
+
+// TestRealSaveGameFixturesRoundTrip does the same for SaveGame-shaped
+// fixtures pulled from the same device. globalData.dat and BACKUP*.dat
+// are the candidates based on filename convention (the .dat files are
+// around 1.5 KB which matches expected SaveGame size).
+func TestRealSaveGameFixturesRoundTrip(t *testing.T) {
+	repoRoot := findRepoRoot(t)
+
+	cases := []string{
+		"globalData.dat",
+		"BACKUP1.dat",
+	}
+
+	for _, name := range cases {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(repoRoot, "tool", "file_types", "testdata", name)
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Skipf("fixture not present at %s: %v", path, err)
+			}
+
+			parsed := ReadSaveGame(bytes.NewReader(raw))
+
+			var buf bytes.Buffer
+			WriteSaveGame(&buf, parsed)
+
+			if !bytes.Equal(raw, buf.Bytes()) {
+				t.Fatalf("%s: round-trip bytes differ (orig %d, got %d)",
+					name, len(raw), buf.Len())
+			}
+		})
+	}
+}
+
 // findRepoRoot walks up from the test file location until it finds the
 // repository root, identified by the presence of go.work.
 func findRepoRoot(t *testing.T) string {
