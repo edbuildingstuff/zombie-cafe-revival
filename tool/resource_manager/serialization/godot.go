@@ -40,6 +40,7 @@ func BuildGodotAssets(in_directory string, out_directory string) {
 	deserializeEnemyItemDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeEnemyItemsForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeEnemyCafeDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
+	deserializeEnemyLayoutsForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeStringsFilesForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeCookbookDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	copyGodotAudio(in_directory, filepath.Join(assetsOut, "audio"))
@@ -223,6 +224,29 @@ func copyGodotDataFiles(in_directory string, out_directory string) {
 		dst := filepath.Join(out_directory, friendly)
 		godotCopyFile(src, dst)
 	}
+}
+
+// deserializeEnemyLayoutsForGodot decodes src/assets/data/enemyLayouts.bin.mid
+// using the byte-preservation ReadEnemyLayouts parser and writes a JSON
+// version to <out>/assets/data/enemyLayouts.json. The JSON just holds the
+// raw bytes as a base64 Data field — a future session can upgrade the
+// struct to a decoded form without touching the wire format or the build
+// pipeline.
+func deserializeEnemyLayoutsForGodot(in_directory string, out_data_directory string) {
+	src := filepath.Join(in_directory, "assets", "data", "enemyLayouts.bin.mid")
+	dst := filepath.Join(out_data_directory, "enemyLayouts.json")
+
+	f, err := os.Open(src)
+	if err != nil {
+		log.Printf("enemyLayouts not present at %s: %v (skipping)", src, err)
+		return
+	}
+	defer f.Close()
+
+	data := file_types.ReadEnemyLayouts(f)
+
+	godotMkdir(filepath.Dir(dst))
+	writeJSONFile(dst, data)
 }
 
 // deserializeEnemyCafeDataForGodot decodes src/assets/data/enemyCafeData.bin.mid

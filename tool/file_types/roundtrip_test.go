@@ -843,6 +843,35 @@ func TestEnemyCafeDataInMemoryFixture(t *testing.T) {
 	}
 }
 
+// TestEnemyLayoutsRoundTrip exercises the byte-preservation parser for
+// enemyLayouts.bin.mid. The parser doesn't decode the file structurally
+// — see the comment on EnemyLayouts for why — so this test is entirely
+// about the round-trip contract: read the file, write it back, assert
+// bytes.Equal. A future structural parser can upgrade the struct
+// without touching the test.
+func TestEnemyLayoutsRoundTrip(t *testing.T) {
+	repoRoot := findRepoRoot(t)
+	path := filepath.Join(repoRoot, "src", "assets", "data", "enemyLayouts.bin.mid")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("fixture not present at %s: %v", path, err)
+	}
+
+	parsed := ReadEnemyLayouts(bytes.NewReader(raw))
+
+	var buf bytes.Buffer
+	WriteEnemyLayouts(&buf, parsed)
+
+	if !bytes.Equal(raw, buf.Bytes()) {
+		t.Fatalf("enemyLayouts round-trip bytes differ (orig %d, got %d)",
+			len(raw), buf.Len())
+	}
+
+	if len(parsed.Data) != 2847 {
+		t.Errorf("Data len = %d, expected 2847", len(parsed.Data))
+	}
+}
+
 // TestEnemyItemsRoundTrip exercises ReadEnemyItems/WriteEnemyItems
 // against the real enemyItems.bin.mid file. Flat string-list format
 // with a 2-byte count header.
