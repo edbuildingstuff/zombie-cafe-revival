@@ -43,6 +43,7 @@ func BuildGodotAssets(in_directory string, out_directory string) {
 	copyGodotAudio(in_directory, filepath.Join(assetsOut, "audio"))
 	copyGodotFonts(in_directory, filepath.Join(assetsOut, "fonts"))
 	packGodotAtlases(in_directory, filepath.Join(assetsOut, "atlases"))
+	packGodotAnimations(in_directory, filepath.Join(assetsOut, "data", "animation"))
 
 	log.Printf("BuildGodotAssets: done")
 }
@@ -366,5 +367,42 @@ func godotCopyFile(src string, dst string) {
 func godotMkdir(dir string) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		log.Fatalf("creating %s: %v", dir, err)
+	}
+}
+
+// packGodotAnimations decodes every per-animation .bin.mid file under
+// src/assets/data/animation/ using file_types.ReadAnimationFile and
+// writes a pretty-printed JSON version to <out>/*.json (one per file).
+// Missing source directory is logged and skipped, matching the
+// tolerance pattern of packGodotAtlases.
+func packGodotAnimations(in_directory string, out_directory string) {
+	in_dir := filepath.Join(in_directory, "assets", "data", "animation")
+	entries, err := os.ReadDir(in_dir)
+	if err != nil {
+		log.Printf("packGodotAnimations: skipping %s: %v", in_dir, err)
+		return
+	}
+
+	godotMkdir(out_directory)
+
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if !strings.HasSuffix(strings.ToLower(e.Name()), ".bin.mid") {
+			continue
+		}
+		src := filepath.Join(in_dir, e.Name())
+		dstName := strings.TrimSuffix(e.Name(), ".bin.mid") + ".json"
+		dst := filepath.Join(out_directory, dstName)
+
+		f, err := os.Open(src)
+		if err != nil {
+			log.Fatalf("opening %s: %v", src, err)
+		}
+		data := file_types.ReadAnimationFile(f)
+		f.Close()
+
+		writeJSONFile(dst, data)
 	}
 }

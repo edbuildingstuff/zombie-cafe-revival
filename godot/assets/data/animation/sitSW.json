@@ -1,0 +1,261 @@
+{
+    "Header": {
+        "Unknown0": 3,
+        "BoneCount": 24,
+        "SkeletonRecordCount": 13
+    },
+    "Prologue": {
+        "PtrMarker0": [
+            95,
+            80,
+            84,
+            82
+        ],
+        "Field0": 2,
+        "Pad0": 0,
+        "PtrMarker1": [
+            95,
+            80,
+            84,
+            82
+        ],
+        "KeyframeCount": 1,
+        "PtrMarker2": [
+            95,
+            80,
+            84,
+            82
+        ],
+        "Pad1": 0,
+        "PtrMarker3": [
+            95,
+            80,
+            84,
+            82
+        ]
+    },
+    "Skeleton": [
+        {
+            "Transform": [
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0
+            ],
+            "Trailer": "zc3Nzc3Nzc0AAAAA/////w=="
+        },
+        {
+            "Transform": [
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0
+            ],
+            "Trailer": "AAAAAAIAAAAAAAAAGgAAAA=="
+        },
+        {
+            "Transform": [
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0
+            ],
+            "Trailer": "AAAAAAcAAAAAAAAAAgAAAA=="
+        },
+        {
+            "Transform": [
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0
+            ],
+            "Trailer": "AgAAAAUAAAAAAAAAFAAAAA=="
+        },
+        {
+            "Transform": [
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0
+            ],
+            "Trailer": "AwAAAM3Nzc0AAAAAEwAAAA=="
+        },
+        {
+            "Transform": [
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0
+            ],
+            "Trailer": "AgAAAM3Nzc0AAAAAGQAAAA=="
+        },
+        {
+            "Transform": [
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0
+            ],
+            "Trailer": "BQAAAM3Nzc0AAAAAGAAAAA=="
+        },
+        {
+            "Transform": [
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0
+            ],
+            "Trailer": "AAAAAAkAAAAAAAAAEgAAAA=="
+        },
+        {
+            "Transform": [
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0
+            ],
+            "Trailer": "BwAAAM3Nzc0AAAAAEQAAAA=="
+        },
+        {
+            "Transform": [
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0
+            ],
+            "Trailer": "AAAAAAsAAAAAAAAAFwAAAA=="
+        },
+        {
+            "Transform": [
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0
+            ],
+            "Trailer": "CQAAAM3Nzc0AAAAAFgAAAA=="
+        },
+        {
+            "Transform": [
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0
+            ],
+            "Trailer": "AAAAAAwAAAAAAAAAEAAAAA=="
+        },
+        {
+            "Transform": [
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0,
+                1,
+                0,
+                0
+            ],
+            "Trailer": "AAAAAM3Nzc0AAAAAFQAAAA=="
+        }
+    ],
+    "Tail": "AAAAAF9QVFJVVVBGX1BUUgAAAAAGAAAABQAAAAkAAAAKAAAAAgAAAAwAAAABAAAABAAAAAMAAAALAAAABwAAAAgAAAAAAAAABgAAAAUAAAAJAAAACgAAAAIAAAAMAAAAAQAAAAQAAAADAAAACwAAAAcAAAAIAAAAAQAAAF9QVFIBAAAAX1BUUgEAAABfUFRSAQAAAF9QVFIBAAAAX1BUUgEAAABfUFRSAQAAAF9QVFIBAAAAX1BUUgEAAABfUFRSAQAAAF9QVFIBAAAAX1BUUgEAAABfUFRSAQAAAF9QVFIAAIA/AAAAAAAAAAAAAIA/5GVqwX1pCMMAAAAA/////wAAgD8AAAAAAAAAAAAAgD8j28m/MejrwQAAAAAaAAAAAACAPwAAAAAAAAAAAACAPxb7gMDmAEdCAAAAAAIAAACMIOI+7q1lP+6tZb+MIOI+yhC4QANgqkEAAAAAFAAAALxQ4z7QYmW/0GJlP7xQ4z6/LxRCqhHjQQAAAAATAAAAFQjZPfmOfj/5jn6/FQjZPfOLbcJIPB5BAAAAABkAAACpGE4+6sJ6v+rCej+pGE4+gdURQqjGw0EAAAAAGAAAAAAAgD8AAAAAAAAAAAAAgD9ECdNBkA06wgAAAAASAAAAcsQ6Pre0ez+3tHu/csQ6Pl/SHcLJDARCAAAAABEAAAAeAX4/qjj/vao4/z0eAX4/M4UMwviWFMIAAAAAFwAAAMgepb2mKn8/pip/v8gepb2rPWLC5X2AQQAAAAAWAAAAAACAPxobL7kaGy85AACAPxfmDMG5JkrDAAAAABAAAAAAAIA/AAAAAAAAAAAAAIA/FvuAwOYAR0IAAAAAFQAAAA=="
+}

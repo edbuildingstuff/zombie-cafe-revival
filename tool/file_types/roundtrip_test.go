@@ -657,3 +657,168 @@ func findRepoRoot(t *testing.T) string {
 	t.Fatalf("could not find repo root (no go.work) starting from %s", wd)
 	return ""
 }
+
+// TestAnimationFileKeyframeCountHypothesis spot-checks the semantic
+// label committed at design time: Prologue.KeyframeCount should be
+// small for static poses (sit) and in the 20-60 range for full
+// animation cycles (walk). If this fails, the field name should be
+// demoted back to a placeholder and the hypothesis revisited.
+func TestAnimationFileKeyframeCountHypothesis(t *testing.T) {
+	repoRoot := findRepoRoot(t)
+
+	cases := []struct {
+		file     string
+		minFrame int32
+		maxFrame int32
+		why      string
+	}{
+		{"sitSW.bin.mid", 1, 3, "sit is a static pose, expect 1-3 frames"},
+		{"walkNW.bin.mid", 20, 60, "walk is a full cycle, expect 20-60 frames"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.file, func(t *testing.T) {
+			path := filepath.Join(repoRoot, "src", "assets", "data", "animation", tc.file)
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Skipf("%s not found: %v", tc.file, err)
+			}
+			parsed := ReadAnimationFile(bytes.NewReader(raw))
+			got := parsed.Prologue.KeyframeCount
+			if got < tc.minFrame || got > tc.maxFrame {
+				t.Errorf("%s.KeyframeCount = %d, expected [%d, %d] (%s)",
+					tc.file, got, tc.minFrame, tc.maxFrame, tc.why)
+			}
+		})
+	}
+}
+
+// TestAnimationFileInMemoryFixture builds an AnimationFile with
+// non-default values across every field and asserts round-trip
+// symmetry. The real .bin.mid files are full of zeros and identity
+// transforms — they catch structural bugs but can miss reader-writer
+// asymmetry on non-default numeric values. This fixture fills that
+// gap.
+func TestAnimationFileInMemoryFixture(t *testing.T) {
+	ptr := [4]byte{'_', 'P', 'T', 'R'}
+	fixture := AnimationFile{
+		Header: AnimationHeader{
+			Unknown0:            3,
+			BoneCount:           24,
+			SkeletonRecordCount: 2,
+		},
+		Prologue: AnimationPrologue{
+			PtrMarker0:    ptr,
+			Field0:        7,
+			Pad0:          0,
+			PtrMarker1:    ptr,
+			KeyframeCount: 5,
+			PtrMarker2:    ptr,
+			Pad1:          0,
+			PtrMarker3:    ptr,
+		},
+		Skeleton: []AnimationRecord{
+			{
+				Transform: [12]float32{
+					0.866, 0.5, 0,
+					-0.5, 0.866, 0,
+					0, 0, 1,
+					10.5, 20.25, 0,
+				},
+				Trailer: []byte{
+					0x01, 0x02, 0x03, 0x04,
+					0x05, 0x06, 0x07, 0x08,
+					0x09, 0x0a, 0x0b, 0x0c,
+					0x0d, 0x0e, 0x0f, 0x10,
+				},
+			},
+			{
+				Transform: [12]float32{
+					1, 0, 0,
+					0, 1, 0,
+					0, 0, 1,
+					-5.75, 100.125, 3.5,
+				},
+				Trailer: []byte{
+					0xcd, 0xcd, 0xcd, 0xcd,
+					0x00, 0x00, 0x00, 0x00,
+					0x00, 0x00, 0x00, 0x00,
+					0xff, 0xff, 0xff, 0xff,
+				},
+			},
+		},
+		Tail: []byte{0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe},
+	}
+
+	var buf bytes.Buffer
+	WriteAnimationFile(&buf, fixture)
+
+	parsed := ReadAnimationFile(bytes.NewReader(buf.Bytes()))
+
+	if parsed.Header != fixture.Header {
+		t.Errorf("header mismatch: got %+v, want %+v",
+			parsed.Header, fixture.Header)
+	}
+	if parsed.Prologue != fixture.Prologue {
+		t.Errorf("prologue mismatch: got %+v, want %+v",
+			parsed.Prologue, fixture.Prologue)
+	}
+	if len(parsed.Skeleton) != len(fixture.Skeleton) {
+		t.Fatalf("skeleton count: got %d, want %d",
+			len(parsed.Skeleton), len(fixture.Skeleton))
+	}
+	for i := range fixture.Skeleton {
+		if parsed.Skeleton[i].Transform != fixture.Skeleton[i].Transform {
+			t.Errorf("skeleton[%d] transform mismatch:\n  got %+v\n  want %+v",
+				i, parsed.Skeleton[i].Transform, fixture.Skeleton[i].Transform)
+		}
+		if !bytes.Equal(parsed.Skeleton[i].Trailer, fixture.Skeleton[i].Trailer) {
+			t.Errorf("skeleton[%d] trailer mismatch:\n  got %x\n  want %x",
+				i, parsed.Skeleton[i].Trailer, fixture.Skeleton[i].Trailer)
+		}
+	}
+	if !bytes.Equal(parsed.Tail, fixture.Tail) {
+		t.Errorf("tail mismatch: got %x, want %x", parsed.Tail, fixture.Tail)
+	}
+}
+
+// TestAnimationFileRoundTrip iterates every .bin.mid file under
+// src/assets/data/animation/ as a sub-test and asserts Read → Write
+// produces byte-identical output. Each file is its own sub-test so
+// a single-file failure names the file precisely. This is the forcing
+// function for the preservation-field contract in animation_file.go:
+// if the writer drops or synthesizes a single byte, one of the 60
+// sub-tests fires and points at the culprit.
+func TestAnimationFileRoundTrip(t *testing.T) {
+	repoRoot := findRepoRoot(t)
+	globPath := filepath.Join(repoRoot, "src", "assets", "data", "animation", "*.bin.mid")
+	files, err := filepath.Glob(globPath)
+	if err != nil {
+		t.Fatalf("glob %s: %v", globPath, err)
+	}
+	if len(files) == 0 {
+		t.Skipf("no animation files found at %s", globPath)
+	}
+
+	for _, path := range files {
+		path := path
+		name := filepath.Base(path)
+		t.Run(name, func(t *testing.T) {
+			original, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+
+			parsed := ReadAnimationFile(bytes.NewReader(original))
+
+			var roundtrip bytes.Buffer
+			WriteAnimationFile(&roundtrip, parsed)
+
+			got := roundtrip.Bytes()
+			if !bytes.Equal(original, got) {
+				t.Fatalf("%s: round-trip bytes differ (orig %d, got %d)",
+					name, len(original), len(got))
+			}
+		})
+	}
+}

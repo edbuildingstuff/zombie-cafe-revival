@@ -258,6 +258,22 @@ func _validate_main_scene() -> Array:
 		instance.queue_free()
 		return [path + ": assemble() built " + str(built) + " sprites"]
 
+	# Phase 1b: drive pose_from_animation so the grid layout gets
+	# replaced by real keyframe-driven positions. Tests the full
+	# Go parser -> JSON -> Godot consumer pipeline end-to-end.
+	if not instance.has_method("pose_from_animation"):
+		instance.queue_free()
+		return [path + ": root node has no pose_from_animation() method"]
+
+	var posed: int = instance.call(
+		"pose_from_animation",
+		"res://assets/data/animation/sitSW.json",
+		0,
+	)
+	if posed <= 0:
+		instance.queue_free()
+		return [path + ": pose_from_animation returned " + str(posed)]
+
 	var sprites: Array = []
 	for child in instance.get_children():
 		if child is Sprite2D:
@@ -282,9 +298,34 @@ func _validate_main_scene() -> Array:
 			+ str(valid_textures)
 		]
 
+	# Pose delta check: at least one sprite must have a position
+	# different from its Phase 2b grid cell origin. Confirms that
+	# pose_from_animation actually mutated positions rather than
+	# leaving the grid in place. Uses constants from main_scene.gd.
+	const CELL_W_CHECK := 140.0
+	const CELL_H_CHECK := 140.0
+	const GRID_ORIGIN_CHECK := Vector2(80.0, 80.0)
+	const GRID_COLS_CHECK := 9
+
+	var pose_applied := false
+	var idx := 0
+	for s in sprites:
+		var sprite := s as Sprite2D
+		var col := idx % GRID_COLS_CHECK
+		var row := idx / GRID_COLS_CHECK
+		var cell_origin := GRID_ORIGIN_CHECK + Vector2(col * CELL_W_CHECK, row * CELL_H_CHECK)
+		if sprite.position.distance_to(cell_origin) > 1.0:
+			pose_applied = true
+			break
+		idx += 1
+
+	if not pose_applied:
+		instance.queue_free()
+		return [path + ": every sprite still at its grid cell origin — pose_from_animation did not move anything"]
+
 	print("  OK main.tscn: ",
 		sprites.size(), " Sprite2D children, ",
-		valid_textures, " with valid AtlasTextures")
+		valid_textures, " with valid AtlasTextures, pose delta applied")
 
 	instance.queue_free()
 	return []
