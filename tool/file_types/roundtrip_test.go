@@ -658,6 +658,71 @@ func findRepoRoot(t *testing.T) string {
 	return ""
 }
 
+// TestStringsFileRoundTrip exercises ReadStringsFile / WriteStringsFile
+// against both src/assets/data/strings_google.bin.mid and
+// src/assets/data/strings_amazon.bin.mid. Despite the .bin.mid suffix
+// these files are plain UTF-8 text with \r\n separators; a round-trip
+// should be byte-identical via strings.Split + strings.Join.
+func TestStringsFileRoundTrip(t *testing.T) {
+	repoRoot := findRepoRoot(t)
+
+	fixtures := []string{
+		"strings_google.bin.mid",
+		"strings_amazon.bin.mid",
+	}
+
+	for _, name := range fixtures {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(repoRoot, "src", "assets", "data", name)
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Skipf("fixture not present at %s: %v", path, err)
+			}
+
+			parsed := ReadStringsFile(bytes.NewReader(raw))
+
+			var buf bytes.Buffer
+			WriteStringsFile(&buf, parsed)
+
+			if !bytes.Equal(raw, buf.Bytes()) {
+				t.Fatalf("%s: round-trip bytes differ (orig %d, got %d)",
+					name, len(raw), buf.Len())
+			}
+
+			// Sanity: the files have hundreds of strings. A parse
+			// that produces zero or one string is probably wrong
+			// (single-string would mean the separator split failed).
+			if len(parsed.Strings) < 10 {
+				t.Errorf("%s: only %d strings decoded, expected many more",
+					name, len(parsed.Strings))
+			}
+		})
+	}
+}
+
+func TestStringsFileInMemoryFixture(t *testing.T) {
+	fixture := StringsFile{
+		Strings: []string{
+			"First string",
+			"Second string",
+			"Third with UTF-8 — café",
+			"",
+			"After an empty string",
+		},
+	}
+
+	var buf bytes.Buffer
+	WriteStringsFile(&buf, fixture)
+
+	parsed := ReadStringsFile(bytes.NewReader(buf.Bytes()))
+
+	if !reflect.DeepEqual(parsed.Strings, fixture.Strings) {
+		t.Errorf("strings mismatch:\n  got %#v\n  want %#v",
+			parsed.Strings, fixture.Strings)
+	}
+}
+
 // TestEnemyItemDataRoundTrip exercises the ReadEnemyItemData /
 // WriteEnemyItemData pair against the real src/assets/data/
 // enemyItemData.bin.mid file. The file is 321 bytes with a clean

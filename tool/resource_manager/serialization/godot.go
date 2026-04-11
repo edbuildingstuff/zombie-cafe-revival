@@ -38,6 +38,7 @@ func BuildGodotAssets(in_directory string, out_directory string) {
 	copyGodotDataFiles(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeAnimationDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeEnemyItemDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
+	deserializeStringsFilesForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	copyGodotAudio(in_directory, filepath.Join(assetsOut, "audio"))
 	copyGodotFonts(in_directory, filepath.Join(assetsOut, "fonts"))
 	packGodotAtlases(in_directory, filepath.Join(assetsOut, "atlases"))
@@ -218,6 +219,33 @@ func copyGodotDataFiles(in_directory string, out_directory string) {
 		src := filepath.Join(in_data, name)
 		dst := filepath.Join(out_directory, friendly)
 		godotCopyFile(src, dst)
+	}
+}
+
+// deserializeStringsFilesForGodot decodes both strings_google.bin.mid and
+// strings_amazon.bin.mid from src/assets/data/ and emits one JSON per
+// input to <out>/<name>.json (e.g., strings_google.json). The two files
+// are nearly identical — they differ by a single URL string — but we
+// emit both so the Godot client can pick whichever one matches its
+// build target at runtime, same as the legacy build. Missing source
+// files are skipped with a log line rather than failing the build.
+func deserializeStringsFilesForGodot(in_directory string, out_data_directory string) {
+	names := []string{"strings_google.bin.mid", "strings_amazon.bin.mid"}
+	for _, name := range names {
+		src := filepath.Join(in_directory, "assets", "data", name)
+		dstName := strings.TrimSuffix(name, ".bin.mid") + ".json"
+		dst := filepath.Join(out_data_directory, dstName)
+
+		f, err := os.Open(src)
+		if err != nil {
+			log.Printf("strings file not present at %s: %v (skipping)", src, err)
+			continue
+		}
+		data := file_types.ReadStringsFile(f)
+		f.Close()
+
+		godotMkdir(filepath.Dir(dst))
+		writeJSONFile(dst, data)
 	}
 }
 
