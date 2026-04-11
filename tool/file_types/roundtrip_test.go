@@ -658,6 +658,77 @@ func findRepoRoot(t *testing.T) string {
 	return ""
 }
 
+// TestCookbookDataRoundTrip exercises ReadCookbookData/WriteCookbookData
+// against the real src/assets/data/cookbookData.bin.mid file. The file
+// is 1164 bytes holding 10 cookbook entries with length-prefixed
+// strings and integer fields.
+func TestCookbookDataRoundTrip(t *testing.T) {
+	repoRoot := findRepoRoot(t)
+	path := filepath.Join(repoRoot, "src", "assets", "data", "cookbookData.bin.mid")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("fixture not present at %s: %v", path, err)
+	}
+
+	parsed := ReadCookbookData(bytes.NewReader(raw))
+
+	var buf bytes.Buffer
+	WriteCookbookData(&buf, parsed)
+
+	if !bytes.Equal(raw, buf.Bytes()) {
+		t.Fatalf("cookbookData round-trip bytes differ (orig %d, got %d)",
+			len(raw), buf.Len())
+	}
+
+	if parsed.Count != 10 {
+		t.Errorf("Count = %d, expected 10", parsed.Count)
+	}
+	if len(parsed.Entries) != 10 {
+		t.Errorf("Entries len = %d, expected 10", len(parsed.Entries))
+	}
+	if len(parsed.Entries) >= 1 && parsed.Entries[0].Name != "Your Favorite Recipes" {
+		t.Errorf("Entries[0].Name = %q, expected \"Your Favorite Recipes\"",
+			parsed.Entries[0].Name)
+	}
+}
+
+func TestCookbookDataInMemoryFixture(t *testing.T) {
+	fixture := CookbookData{
+		Count: 2,
+		Entries: []CookbookEntry{
+			{
+				Name:             "Test Cookbook A",
+				Fields:           [4]int16{100, 200, 300, 400},
+				Description:      "First description.",
+				AfterDescription: 5,
+				Status:           "Active",
+				Trailer:          7,
+			},
+			{
+				Name:             "Test Cookbook B — with UTF-8 café",
+				Fields:           [4]int16{-1, 0, 32767, -32768},
+				Description:      "Second.",
+				AfterDescription: 0,
+				Status:           "",
+				Trailer:          1,
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	WriteCookbookData(&buf, fixture)
+
+	parsed := ReadCookbookData(bytes.NewReader(buf.Bytes()))
+
+	if parsed.Count != fixture.Count {
+		t.Errorf("Count: got %d, want %d", parsed.Count, fixture.Count)
+	}
+	if !reflect.DeepEqual(parsed.Entries, fixture.Entries) {
+		t.Errorf("entries mismatch:\n  got %#v\n  want %#v",
+			parsed.Entries, fixture.Entries)
+	}
+}
+
 // TestStringsFileRoundTrip exercises ReadStringsFile / WriteStringsFile
 // against both src/assets/data/strings_google.bin.mid and
 // src/assets/data/strings_amazon.bin.mid. Despite the .bin.mid suffix

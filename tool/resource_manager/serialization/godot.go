@@ -39,6 +39,7 @@ func BuildGodotAssets(in_directory string, out_directory string) {
 	deserializeAnimationDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeEnemyItemDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	deserializeStringsFilesForGodot(in_directory, filepath.Join(assetsOut, "data"))
+	deserializeCookbookDataForGodot(in_directory, filepath.Join(assetsOut, "data"))
 	copyGodotAudio(in_directory, filepath.Join(assetsOut, "audio"))
 	copyGodotFonts(in_directory, filepath.Join(assetsOut, "fonts"))
 	packGodotAtlases(in_directory, filepath.Join(assetsOut, "atlases"))
@@ -220,6 +221,26 @@ func copyGodotDataFiles(in_directory string, out_directory string) {
 		dst := filepath.Join(out_directory, friendly)
 		godotCopyFile(src, dst)
 	}
+}
+
+// deserializeCookbookDataForGodot decodes src/assets/data/cookbookData.bin.mid
+// using ReadCookbookData and writes a pretty-printed JSON version to
+// <out>/assets/data/cookbookData.json. Missing source logs and returns.
+func deserializeCookbookDataForGodot(in_directory string, out_data_directory string) {
+	src := filepath.Join(in_directory, "assets", "data", "cookbookData.bin.mid")
+	dst := filepath.Join(out_data_directory, "cookbookData.json")
+
+	f, err := os.Open(src)
+	if err != nil {
+		log.Printf("cookbookData not present at %s: %v (skipping)", src, err)
+		return
+	}
+	defer f.Close()
+
+	data := file_types.ReadCookbookData(f)
+
+	godotMkdir(filepath.Dir(dst))
+	writeJSONFile(dst, data)
 }
 
 // deserializeStringsFilesForGodot decodes both strings_google.bin.mid and
