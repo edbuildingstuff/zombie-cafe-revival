@@ -23,6 +23,8 @@
 
 .field public static final TOKEN:Ljava/lang/String; = "access_token"
 
+.field public static currentDialog:Lcom/capcom/facebook/h;
+
 
 # instance fields
 .field private a:Ljava/lang/String;
@@ -43,7 +45,7 @@
 .method static constructor <clinit>()V
     .locals 1
 
-    const-string v0, "https://airyz.xyz/"
+    const-string v0, "https://github.com/edbuildingstuff/"
 
     sput-object v0, Lcom/capcom/facebook/Facebook;->DIALOG_BASE_URL:Ljava/lang/String;
 
@@ -876,9 +878,13 @@
 
     :cond_2
 
+    const-string v0, "https://github.com/edbuildingstuff"
+
     new-instance v1, Lcom/capcom/facebook/h;
 
     invoke-direct {v1, p1, v0, p4}, Lcom/capcom/facebook/h;-><init>(Landroid/content/Context;Ljava/lang/String;Lcom/capcom/facebook/f;)V
+
+    sput-object v1, Lcom/capcom/facebook/Facebook;->currentDialog:Lcom/capcom/facebook/h;
 
     invoke-virtual {p0, v1}, Lcom/capcom/facebook/Facebook;->doThing(Lcom/capcom/facebook/h;)V
 

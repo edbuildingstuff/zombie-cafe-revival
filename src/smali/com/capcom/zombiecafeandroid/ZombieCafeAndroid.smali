@@ -4524,6 +4524,25 @@
 .method public onBackPressed()V
     .locals 6
 
+    sget-object v0, Lcom/capcom/facebook/Facebook;->currentDialog:Lcom/capcom/facebook/h;
+
+    if-eqz v0, :no_fb_dialog
+
+    invoke-virtual {v0}, Lcom/capcom/facebook/h;->isShowing()Z
+
+    move-result v1
+
+    if-eqz v1, :no_fb_dialog
+
+    invoke-virtual {v0}, Lcom/capcom/facebook/h;->dismiss()V
+
+    const/4 v0, 0x0
+
+    sput-object v0, Lcom/capcom/facebook/Facebook;->currentDialog:Lcom/capcom/facebook/h;
+
+    return-void
+
+    :no_fb_dialog
     const-string v0, "ONBACKPRESSED"
 
     const-string v1, "Handle Back Button"

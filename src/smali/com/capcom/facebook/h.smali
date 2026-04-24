@@ -270,6 +270,14 @@
 
     iget-object v0, p0, Lcom/capcom/facebook/h;->g:Landroid/webkit/WebView;
 
+    invoke-virtual {v0, v6}, Landroid/webkit/WebView;->setFocusable(Z)V
+
+    iget-object v0, p0, Lcom/capcom/facebook/h;->g:Landroid/webkit/WebView;
+
+    invoke-virtual {v0, v6}, Landroid/webkit/WebView;->setFocusableInTouchMode(Z)V
+
+    iget-object v0, p0, Lcom/capcom/facebook/h;->g:Landroid/webkit/WebView;
+
     new-instance v1, Lcom/capcom/facebook/i;
 
     invoke-direct {v1, p0, v6}, Lcom/capcom/facebook/i;-><init>(Lcom/capcom/facebook/h;B)V
@@ -451,4 +459,69 @@
     sget-object v0, Lcom/capcom/facebook/h;->b:[F
 
     goto :goto_2
+.end method
+
+.method public dispatchKeyEvent(Landroid/view/KeyEvent;)Z
+    .locals 3
+
+    invoke-virtual {p1}, Landroid/view/KeyEvent;->getKeyCode()I
+
+    move-result v0
+
+    const/4 v1, 0x4
+
+    if-ne v0, v1, :cond_1
+
+    invoke-virtual {p1}, Landroid/view/KeyEvent;->getAction()I
+
+    move-result v0
+
+    const/4 v1, 0x1
+
+    if-ne v0, v1, :cond_0
+
+    :try_start_0
+    invoke-virtual {p0}, Lcom/capcom/facebook/h;->getWindow()Landroid/view/Window;
+
+    move-result-object v0
+
+    invoke-virtual {v0}, Landroid/view/Window;->getDecorView()Landroid/view/View;
+
+    move-result-object v0
+
+    invoke-virtual {p0}, Lcom/capcom/facebook/h;->getContext()Landroid/content/Context;
+
+    move-result-object v1
+
+    const-string v2, "window"
+
+    invoke-virtual {v1, v2}, Landroid/content/Context;->getSystemService(Ljava/lang/String;)Ljava/lang/Object;
+
+    move-result-object v1
+
+    check-cast v1, Landroid/view/ViewManager;
+
+    invoke-interface {v1, v0}, Landroid/view/ViewManager;->removeView(Landroid/view/View;)V
+    :try_end_0
+    .catch Ljava/lang/Throwable; {:try_start_0 .. :try_end_0} :cond_0
+
+    sget-object v0, Lcom/capcom/facebook/Facebook;->currentDialog:Lcom/capcom/facebook/h;
+
+    if-ne v0, p0, :cond_0
+
+    const/4 v0, 0x0
+
+    sput-object v0, Lcom/capcom/facebook/Facebook;->currentDialog:Lcom/capcom/facebook/h;
+
+    :cond_0
+    const/4 v0, 0x1
+
+    return v0
+
+    :cond_1
+    invoke-super {p0, p1}, Landroid/app/Dialog;->dispatchKeyEvent(Landroid/view/KeyEvent;)Z
+
+    move-result v0
+
+    return v0
 .end method
