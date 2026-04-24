@@ -130,44 +130,6 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
   Memory::setNop((void*)(base + 0xe0a02), 2);
 
   /*
-    javaStartEffect+50 NOP. This one sat unexplained during the initial
-    disassembly pass because javaStartEffect itself does no C++ heap
-    work — it's a bog-standard JNI invoker (AttachCurrentThread, load
-    cached jmethodID, bl CallStaticBooleanMethod). The full chain only
-    became visible in a later tombstone (GLThread 37, uptime 417s,
-    2026-04-19 22:51) that unwound past the JNI boundary:
-
-      scudo_free
-        android::RefBase::decStrong
-        android::sp<MediaPlayerListener>::operator=
-        android::MediaPlayer::setListener
-        android_media_MediaPlayer_release
-        android.media.MediaPlayer.release
-        com.capcom.zombiecafeandroid.SoundManager.playSound+312    <<-- bug
-        com.capcom.zombiecafeandroid.CC_Android.fromNative_startEffect
-        ... libart JNI dispatch ...
-        _JNIEnv::CallStaticBooleanMethod
-        javaStartEffect+50
-
-    SoundManager.playSound is the game's own Java code. It invokes
-    android.media.MediaPlayer.release() whose setListener(null) drops
-    the last sp<MediaPlayerListener> strong ref, causing RefBase to
-    delete a listener whose chunk header is already corrupt. A cleaner
-    fix would be to smali-patch SoundManager.playSound to stop calling
-    release() (keeping audio working), but that's more invasive and the
-    existing SoundManager.setEnabled NOP above already trades audio for
-    stability in the same way.
-
-    Gets us a 4th GLThread crash site disabled. Accounts for the 3 of 5
-    GLThread tombstones in the 2026-04-13..19 corpus that had
-    javaStartEffect in their chain (01, 02, 29) plus today's 22:51:20.
-    The map-tap framebuffer crash (tombstone 22:43:55 — Mali framebuffer
-    pool free from GameStateLoading::paint) is a separate bug still
-    being investigated via GWP-ASan.
-  */
-  Memory::setNop((void*)(base + 0x17e186), 4);
-
-  /*
     javaMD5String+102 OOB write. This is the root cause of the
     "Scudo: corrupted chunk header" epidemic. Caught by GWP-ASan
     (sample_rate=10, gwpAsanMode=always in the debuggable build):
