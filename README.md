@@ -18,6 +18,10 @@ This fork is maintained by **Edward Yang** ([@edbuildingstuff](https://github.co
 
 ## Where the project is today
 
+![v1.1.0 in-game cafe](docs/images/cafe-v1.1.0.png)
+
+*v1.1.0 running on a Samsung Note 20 Ultra (Android 13): level-33 cafe, 546 toxin (slot-picker IAP bypass working), restored character SFX, no native crashes.*
+
 The existing Android build is functional and playable:
 
 - The original `libZombieCafeAndroid.so` (~1.9 MB, `armeabi-v7a`) is left untouched on disk. At process startup, `LibZombieCafeExtension` is loaded alongside it and uses `mprotect` + memcpy to rewrite a handful of byte ranges — fixing a texture destructor crash, redirecting the game's hardcoded server URLs to `zc.airyz.xyz`, swapping the "money buy" button to "toxin buy," and patching the version string.
