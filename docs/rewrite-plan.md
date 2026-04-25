@@ -140,13 +140,17 @@ Pending:
 - *(pending, future)* Cafe background. Blocked on the `mapTiles` texture packer being enabled (currently commented out in the legacy `build_tool/main.go`).
 - *(done)* Real skeletal posing for `boxer-human`. `main_scene.gd` gained a `pose_from_animation(json_path, frame_index)` method that loads `godot/assets/data/animation/sitSW.json`, pulls the 13-record skeleton section, and writes bone-derived `Sprite2D` positions on top of the Phase 2b grid. The grid layout stays as a graceful fallback when the JSON is missing or malformed (no scene crash). The pose uses the translation component of each 3×4 transform (indices 9, 10 of the 12-float block) anchored at screen-center (640, 360). `validate_assets.gd`'s `_validate_main_scene` check gained a pose delta assertion that confirms at least one sprite position differs from its grid cell origin after posing runs — end-to-end headless verification that the Go parser → JSON → Godot consumer pipeline works. Does NOT yet render a biologically faithful sit pose because the skeleton-section translations are all zero in the bind pose; real per-keyframe data lives in the opaque Tail section that's deferred. See `docs/devlog/2026-04-11-phase-1b-animation-parser.md` for details.
 
-### Phase 3 — Save-load round-trip *(blocked on Phase 0b)*
+### Phase 3 — Save-load round-trip *(in progress)*
 
 **Done when:** the Godot client can load a real save file produced by the legacy Android build, render the cafe layout described by it, and write it back out byte-identically. No tick simulation yet — this is purely a data path.
 
 Why this before gameplay: if the Godot client can't agree with the Go tooling on what a save file means, there's no point implementing a tick loop. This is the fidelity contract.
 
-**Blocked on Phase 0b:** byte-identical round-tripping requires `SaveGame`, `Cafe`, and `FriendCafe` to have lossless parsers and matching writers. The current readers discard bytes in several places (see Phase 0b), so this phase cannot start until Phase 0b is complete.
+Landed (Session 1 of 4 per `docs/superpowers/specs/2026-04-25-godot-save-format-bridge-design.md`):
+
+- *(done)* `godot/scripts/save/binary_reader.gd`, `binary_writer.gd` — primitive read/write helpers mirroring the Go `binary_reader.go` / `binary_writer.go` (BE ints, LE ints + floats, bool, BE int16 length-prefixed UTF-8 strings, Date struct).
+- *(done)* `godot/scripts/save/legacy_loader.gd`, `legacy_writer.gd` — `parse_cafe` and `write_cafe` plus all 8 sub-record parsers/writers (`FoodStack`, `Food`, `CafeObject`, `CafeWall`, `CafeFurniture`, `Stove`, `ServingCounter`, `CafeTile`). PascalCase Dictionary keys mirror Go's default `json.Marshal` output.
+- *(done)* `godot/test/test_save_round_trip.gd` — Layer-1 round-trip runner. Real fixtures `playerCafe.caf` (20,129 B) and `BACKUP1.caf` (20,017 B) round-trip byte-identically through GDScript. 87 PASS / 0 FAIL.
 
 Deliverables:
 - A GDScript/C# wrapper that calls into the Go `file_types` package (via a compiled shared library, or by round-tripping through JSON).
