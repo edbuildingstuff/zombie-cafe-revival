@@ -49,8 +49,8 @@ func write_food_stack(w: BinaryWriter, f: Dictionary, version: int) -> void:
 	if version <= 48:
 		w.write_int16(int(f["U4"]))
 	w.write_byte(int(f["U5"]))
-	w.write_string(f["U6"] as String)
-	w.write_string(f["U6Alt"] as String)
+	w.write_string(f["U6"])
+	w.write_string(f["U6Alt"])
 	if version > 51:
 		w.write_date(f["U7"] as Dictionary)
 
@@ -202,3 +202,105 @@ func write_cafe_tile(w: BinaryWriter, t: Dictionary, version: int) -> void:
 	w.write_bool(u8)
 	if u8:
 		write_cafe_object(w, t["U9"] as Dictionary, version)
+
+
+func write_save_strings(w: BinaryWriter, s: Dictionary) -> void:
+	w.write_int16(int(s["RawCount"]))
+	for str in (s["Strings"] as Array):
+		w.write_string(str)
+
+
+func write_character_instance(w: BinaryWriter, c: Dictionary, version: int) -> void:
+	w.write_byte(int(c["Type"]))
+	w.write_string(c["Name"])
+	w.write_byte(int(c["U2"]))
+	w.write_byte(int(c["U3"]))
+	w.write_float(float(c["U4"]))
+	w.write_byte(int(c["U5"]))
+	w.write_int64(int(c["U6"]))
+	w.write_byte(int(c["U7"]))
+	w.write_int64(int(c["U8"]))
+	w.write_int64(int(c["U9"]))
+	w.write_int32(int(c["U10"]))
+	w.write_int32(int(c["U11"]))
+	w.write_int32(int(c["U12"]))
+	w.write_int32(int(c["U13"]))
+	if version > 29:
+		w.write_byte(int(c["U14"]))
+		if version > 46:
+			w.write_int32(int(c["U15"]))
+			w.write_int32(int(c["U16"]))
+
+
+func write_cafe_state(w: BinaryWriter, s: Dictionary, version: int) -> void:
+	w.write_float64(float(s["U1"]))
+	w.write_float(float(s["ExperiencePoints"]))
+	w.write_int32(int(s["Toxin"]))
+	w.write_int32(int(s["Money"]))
+	w.write_int32(int(s["Level"]))
+	w.write_int32(int(s["U6"]))
+	w.write_int32(int(s["U7"]))
+	w.write_float(float(s["U8"]))
+	w.write_int32(int(s["U9"]))
+	w.write_bool(s["U10"])
+	write_character_instance(w, s["Character"] as Dictionary, version)
+
+	w.write_byte(int(s["NumZombies"]))
+	for z in (s["Zombies"] as Array):
+		write_character_instance(w, z as Dictionary, version)
+
+	if version > 62:
+		w.write_int32(int(s["U11"]))
+	else:
+		w.write_byte(int(s["U11"]))
+
+	for v in (s["U12"] as Array):
+		w.write_int8(int(v))
+
+	if version > 33:
+		w.write_bool(s["U13"])
+
+
+func write_save_game(w: BinaryWriter, s: Dictionary) -> void:
+	w.write_byte(int(s["Version"]))
+	if int(s["Version"]) != 63:
+		return
+
+	var version: int = int(s["Version"])
+	write_cafe_state(w, s["State"] as Dictionary, version)
+	write_save_strings(w, s["PreStrings"] as Dictionary)
+	w.write_date(s["U15"] as Dictionary)
+	write_save_strings(w, s["PostStrings"] as Dictionary)
+	w.write_date(s["U17"] as Dictionary)
+	w.write_int16(int(s["NumOrders"]))
+	if int(s["NumOrders"]) > 0:
+		push_error("write_save_game: NumOrders > 0 — orders serialization not implemented")
+		return
+	w.write_byte(int(s["U18"]))
+	w.write_byte(int(s["U19"]))
+	w.write_bool(s["U20"])
+
+	var b64: String = String(s.get("Trailing_b64", ""))
+	if b64 != "":
+		var tail: PackedByteArray = Marshalls.base64_to_raw(b64)
+		w.append_bytes(tail)
+
+
+static func write_save_game_bytes(save: Dictionary) -> PackedByteArray:
+	var writer := LegacyWriter.new()
+	var w := BinaryWriter.make()
+	writer.write_save_game(w, save)
+	return w.to_bytes()
+
+
+func write_friend_cafe(w: BinaryWriter, f: Dictionary) -> void:
+	w.write_byte(int(f["Version"]))
+	write_cafe_state(w, f["State"] as Dictionary, int(f["Version"]))
+	write_cafe(w, f["Cafe"] as Dictionary)
+
+
+static func write_friend_cafe_bytes(fc: Dictionary) -> PackedByteArray:
+	var writer := LegacyWriter.new()
+	var w := BinaryWriter.make()
+	writer.write_friend_cafe(w, fc)
+	return w.to_bytes()

@@ -152,6 +152,14 @@ Landed (Session 1 of 4 per `docs/superpowers/specs/2026-04-25-godot-save-format-
 - *(done)* `godot/scripts/save/legacy_loader.gd`, `legacy_writer.gd` — `parse_cafe` and `write_cafe` plus all 8 sub-record parsers/writers (`FoodStack`, `Food`, `CafeObject`, `CafeWall`, `CafeFurniture`, `Stove`, `ServingCounter`, `CafeTile`). PascalCase Dictionary keys mirror Go's default `json.Marshal` output.
 - *(done)* `godot/test/test_save_round_trip.gd` — Layer-1 round-trip runner. Real fixtures `playerCafe.caf` (20,129 B) and `BACKUP1.caf` (20,017 B) round-trip byte-identically through GDScript. 87 PASS / 0 FAIL.
 
+Landed (Session 2 of 4 per `docs/superpowers/specs/2026-04-25-godot-save-format-bridge-design.md`):
+
+- *(done)* `legacy_loader.gd` / `legacy_writer.gd` extended with `parse_save_strings`, `parse_character_instance`, `parse_cafe_state`, `parse_save_game`, `parse_friend_cafe`, plus matching writers and `parse_*_bytes` / `write_*_bytes` static dispatch wrappers. The `SaveStrings` count-1 quirk (`RawCount=0` and `RawCount=1` both decode to zero strings) is preserved by storing `RawCount` separately from the string list. The ~1 KB `SaveGame.Trailing` preservation field is stored as `Trailing_b64` (standard base64) per the spec's `_b64` suffix convention.
+- *(done)* New primitives `read_int8` / `write_int8` and `BinaryWriter.append_bytes` added to support `CafeState.U12 []int8` and the `Trailing_b64` re-emit path.
+- *(done)* **Architectural deviation from spec:** `read_string` now returns `PackedByteArray` (not `String`) because the legacy fixtures contain `\r\0` byte suffixes inside `CharacterInstance.Name` strings that Godot's `String` cannot represent (the engine refuses to hold a NUL codepoint). `write_string` accepts both `PackedByteArray` and `String` via `Variant`. Test helpers (`_str_eq`, `_string_array_eq`) bridge the two representations. **Implication for Session 3:** the JSON envelope cannot serialize string fields as plain JSON strings — needs a hybrid scheme (UTF-8 decode when valid + no NULs, else `_b64` sibling field). See `binary_reader.gd:125-132` for the rationale.
+- *(done)* Three more fixtures copied into `godot/test/fixtures/save/`: `globalData.dat` (1,626 B), `BACKUP1.dat` (1,556 B), `ServerData.dat` (20,747 B).
+- *(done)* `godot/test/test_save_round_trip.gd` extended with 8 new `_test_*` functions covering all five real fixtures plus boundary in-memory cases. Runner banner renamed to "Save round-trip results". Final count: **170 PASS / 0 FAIL**.
+
 Deliverables:
 - A GDScript/C# wrapper that calls into the Go `file_types` package (via a compiled shared library, or by round-tripping through JSON).
 - A test save file checked in under `godot/test/fixtures/`.

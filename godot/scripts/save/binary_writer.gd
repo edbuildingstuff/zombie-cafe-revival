@@ -78,8 +78,16 @@ func write_float64(v: float) -> void:
 	_buf.append_array(sub)
 
 
-func write_string(v: String) -> void:
-	var b: PackedByteArray = v.to_utf8_buffer()
+func write_string(v: Variant) -> void:
+	# Accepts either PackedByteArray (byte-faithful, preserves embedded
+	# NULs from the legacy save format) or String (encoded via UTF-8).
+	# Parsers store the byte form in their Dictionary representation;
+	# in-memory test fixtures may pass plain Strings for convenience.
+	var b: PackedByteArray
+	if v is PackedByteArray:
+		b = v
+	else:
+		b = String(v).to_utf8_buffer()
 	write_int16(b.size())
 	_buf.append_array(b)
 
@@ -91,3 +99,11 @@ func write_date(d: Dictionary) -> void:
 	write_byte(int(d["Hour"]))
 	write_byte(int(d["Minute"]))
 	write_byte(int(d["Second"]))
+
+
+func write_int8(v: int) -> void:
+	write_byte(v & 0xFF)
+
+
+func append_bytes(bytes: PackedByteArray) -> void:
+	_buf.append_array(bytes)

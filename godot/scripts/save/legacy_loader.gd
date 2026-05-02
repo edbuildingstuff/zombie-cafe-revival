@@ -274,3 +274,162 @@ func parse_cafe_tile(r: BinaryReader, version: int) -> Dictionary:
 	else:
 		t["U9"] = null
 	return t
+
+
+func parse_save_strings(r: BinaryReader) -> Dictionary:
+	var d: Dictionary = {"RawCount": 0, "Strings": []}
+	d["RawCount"] = r.read_int16()
+	var num: int = int(d["RawCount"]) - 1
+	if num >= 0:
+		var i: int = num
+		var arr: Array = d["Strings"] as Array
+		while i >= 1:
+			arr.append(r.read_string())
+			i -= 1
+	return d
+
+
+func parse_character_instance(r: BinaryReader, version: int) -> Dictionary:
+	var c: Dictionary = {
+		"Type": 0, "Name": "",
+		"U2": 0, "U3": 0, "U4": 0.0, "U5": 0,
+		"U6": 0, "U7": 0, "U8": 0, "U9": 0,
+		"U10": 0, "U11": 0, "U12": 0, "U13": 0,
+		"U14": 0, "U15": 0, "U16": 0,
+	}
+	c["Type"] = r.read_byte()
+	c["Name"] = r.read_string()
+	c["U2"] = r.read_byte()
+	c["U3"] = r.read_byte()
+	c["U4"] = r.read_float()
+	c["U5"] = r.read_byte()
+	c["U6"] = r.read_int64()
+	c["U7"] = r.read_byte()
+	c["U8"] = r.read_int64()
+	c["U9"] = r.read_int64()
+	c["U10"] = r.read_int32()
+	c["U11"] = r.read_int32()
+	c["U12"] = r.read_int32()
+	c["U13"] = r.read_int32()
+	if version > 29:
+		c["U14"] = r.read_byte()
+		if version > 46:
+			c["U15"] = r.read_int32()
+			c["U16"] = r.read_int32()
+	return c
+
+
+func parse_cafe_state(r: BinaryReader, version: int) -> Dictionary:
+	var s: Dictionary = {
+		"U1": 0.0, "ExperiencePoints": 0.0,
+		"Toxin": 0, "Money": 0, "Level": 0,
+		"U6": 0, "U7": 0, "U8": 0.0, "U9": 0, "U10": false,
+		"Character": {},
+		"NumZombies": 0, "Zombies": [],
+		"U11": 0, "U12": [], "U13": false,
+	}
+	s["U1"] = r.read_float64()
+	s["ExperiencePoints"] = r.read_float()
+	s["Toxin"] = r.read_int32()
+	s["Money"] = r.read_int32()
+	s["Level"] = r.read_int32()
+	s["U6"] = r.read_int32()
+	s["U7"] = r.read_int32()
+	s["U8"] = r.read_float()
+	s["U9"] = r.read_int32()
+	s["U10"] = r.read_bool()
+	s["Character"] = parse_character_instance(r, version)
+
+	s["NumZombies"] = r.read_byte()
+	var zombies: Array = []
+	for i in range(int(s["NumZombies"])):
+		zombies.append(parse_character_instance(r, version))
+	s["Zombies"] = zombies
+
+	if version > 62:
+		s["U11"] = r.read_int32()
+	else:
+		s["U11"] = int(r.read_byte())
+
+	var u12: Array = []
+	for i in range(int(s["U11"])):
+		u12.append(r.read_int8())
+	s["U12"] = u12
+
+	if version > 33:
+		s["U13"] = r.read_bool()
+	return s
+
+
+func parse_save_game(r: BinaryReader) -> Dictionary:
+	var s: Dictionary = {
+		"Version": 0,
+		"State": {},
+		"PreStrings": {"RawCount": 0, "Strings": []},
+		"U15": {"Year": 0, "Month": 0, "Day": 0, "Hour": 0, "Minute": 0, "Second": 0},
+		"PostStrings": {"RawCount": 0, "Strings": []},
+		"U17": {"Year": 0, "Month": 0, "Day": 0, "Hour": 0, "Minute": 0, "Second": 0},
+		"NumOrders": 0,
+		"U18": 0, "U19": 0, "U20": false,
+		"Trailing_b64": "",
+	}
+	s["Version"] = r.read_byte()
+	if int(s["Version"]) != 63:
+		# Default-zero return matches Go's behavior for unknown versions.
+		return s
+
+	var version: int = int(s["Version"])
+	s["State"] = parse_cafe_state(r, version)
+	s["PreStrings"] = parse_save_strings(r)
+	s["U15"] = r.read_date()
+	s["PostStrings"] = parse_save_strings(r)
+	s["U17"] = r.read_date()
+	s["NumOrders"] = r.read_int16()
+	if int(s["NumOrders"]) > 0:
+		push_error("parse_save_game: NumOrders > 0 — orders deserialization not implemented")
+		r.failed = true
+		return s
+	s["U18"] = r.read_byte()
+	s["U19"] = r.read_byte()
+	s["U20"] = r.read_bool()
+	# Preserve any trailing bytes the struct doesn't know about — globalData.dat
+	# carries ~1 KB of additional data past U20 (probably an extended character
+	# / friend list). Storing as base64 keeps the JSON envelope round-trip in
+	# Sessions 3+ readable.
+	if r.remaining() > 0:
+		var tail: PackedByteArray = r.bytes.slice(r.pos, r.bytes.size())
+		s["Trailing_b64"] = Marshalls.raw_to_base64(tail)
+		r.pos = r.bytes.size()
+	return s
+
+
+static func parse_save_game_bytes(data: PackedByteArray) -> Dictionary:
+	var loader := LegacyLoader.new()
+	var reader := BinaryReader.wrap(data)
+	var result: Dictionary = loader.parse_save_game(reader)
+	if reader.failed or reader.remaining() != 0:
+		push_error("parse_save_game_bytes: reader failed=%s remaining=%d" % [reader.failed, reader.remaining()])
+		return {}
+	return result
+
+
+func parse_friend_cafe(r: BinaryReader) -> Dictionary:
+	var f: Dictionary = {"Version": 0, "State": {}, "Cafe": {}}
+	f["Version"] = r.read_byte()
+	if int(f["Version"]) != 63:
+		push_error("parse_friend_cafe: unsupported version %d" % int(f["Version"]))
+		r.failed = true
+		return f
+	f["State"] = parse_cafe_state(r, int(f["Version"]))
+	f["Cafe"] = parse_cafe(r)
+	return f
+
+
+static func parse_friend_cafe_bytes(data: PackedByteArray) -> Dictionary:
+	var loader := LegacyLoader.new()
+	var reader := BinaryReader.wrap(data)
+	var result: Dictionary = loader.parse_friend_cafe(reader)
+	if reader.failed or reader.remaining() != 0:
+		push_error("parse_friend_cafe_bytes: reader failed=%s remaining=%d" % [reader.failed, reader.remaining()])
+		return {}
+	return result

@@ -122,21 +122,29 @@ func read_float64() -> float:
 	return sub.decode_double(0)
 
 
-func read_string() -> String:
+func read_string() -> PackedByteArray:
+	# Returns the raw bytes of the length-prefixed string. The legacy save
+	# format permits embedded NUL bytes (real `globalData.dat` strings end
+	# with a `\r\0` suffix), so byte-faithful round-trip requires we keep
+	# bytes rather than decoding through Godot's String type which strips
+	# embedded NULs. Use PackedByteArray.get_string_from_utf8() at consumer
+	# boundaries when a printable form is needed.
+	# Do NOT change this to return String — Godot's String cannot hold
+	# NUL codepoints (verified empirically against globalData.dat).
 	var length: int = read_int16()
 	if failed:
-		return ""
+		return PackedByteArray()
 	if length == 0:
-		return ""
+		return PackedByteArray()
 	if length < 0:
 		push_error("BinaryReader.read_string: negative length %d at pos=%d" % [length, pos - 2])
 		failed = true
-		return ""
+		return PackedByteArray()
 	if not _need(length):
-		return ""
+		return PackedByteArray()
 	var sub: PackedByteArray = bytes.slice(pos, pos + length)
 	pos += length
-	return sub.get_string_from_utf8()
+	return sub
 
 
 func read_date() -> Dictionary:
@@ -148,3 +156,10 @@ func read_date() -> Dictionary:
 	d["Minute"] = read_byte()
 	d["Second"] = read_byte()
 	return d
+
+
+func read_int8() -> int:
+	var v: int = read_byte()
+	if v >= 0x80:
+		v -= 0x100
+	return v

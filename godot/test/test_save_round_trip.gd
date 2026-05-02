@@ -22,8 +22,15 @@ func _init() -> void:
 	_test_cafe_furniture_plain_round_trip()
 	_test_cafe_object_recursive_round_trip()
 	_test_cafe_fixtures()
+	_test_save_strings_round_trip()
+	_test_character_instance_round_trip()
+	_test_cafe_state_round_trip()
+	_test_save_game_in_memory_round_trip()
+	_test_save_game_fixtures()
+	_test_friend_cafe_in_memory_round_trip()
+	_test_friend_cafe_fixture()
 
-	print("\n=== Session 1 results: %d passed, %d failed ===" % [_passed, _failed])
+	print("\n=== Save round-trip results: %d passed, %d failed ===" % [_passed, _failed])
 	if _failed > 0:
 		quit(1)
 	else:
@@ -67,6 +74,9 @@ func _test_primitives_round_trip() -> void:
 	w.write_string("")
 	w.write_string("hello, 世界")
 	w.write_date({"Year": 2026, "Month": 4, "Day": 25, "Hour": 15, "Minute": 18, "Second": 0})
+	w.write_int8(-128)
+	w.write_int8(127)
+	w.write_int8(-1)
 
 	var r := BinaryReader.wrap(w.to_bytes())
 
@@ -88,12 +98,15 @@ func _test_primitives_round_trip() -> void:
 	_check("read_int32_le -1", r.read_int32_le() == -1)
 	_check("read_float", abs(r.read_float() - 3.140625) < 1e-9)
 	_check("read_float64", abs(r.read_float64() - 2.718281828459045) < 1e-15)
-	_check("read_string empty", r.read_string() == "")
-	_check("read_string utf8", r.read_string() == "hello, 世界")
+	_check("read_string empty", _str_eq(r.read_string(), ""))
+	_check("read_string utf8", _str_eq(r.read_string(), "hello, 世界"))
 	var d: Dictionary = r.read_date()
 	_check("read_date round-trip",
 		d["Year"] == 2026 and d["Month"] == 4 and d["Day"] == 25
 		and d["Hour"] == 15 and d["Minute"] == 18 and d["Second"] == 0)
+	_check("read_int8 -128", r.read_int8() == -128)
+	_check("read_int8 127", r.read_int8() == 127)
+	_check("read_int8 -1", r.read_int8() == -1)
 	_check("reader fully consumed", r.remaining() == 0,
 		"%d bytes remaining" % r.remaining())
 	_check("reader did not fail", r.failed == false)
@@ -126,8 +139,8 @@ func _test_food_stack_round_trip() -> void:
 	_check("food_stack U1", decoded["U1"] == original["U1"])
 	_check("food_stack U3", decoded["U3"] == original["U3"])
 	_check("food_stack U5", decoded["U5"] == original["U5"])
-	_check("food_stack U6", decoded["U6"] == original["U6"])
-	_check("food_stack U6Alt", decoded["U6Alt"] == original["U6Alt"])
+	_check("food_stack U6", _str_eq(decoded["U6"], original["U6"]))
+	_check("food_stack U6Alt", _str_eq(decoded["U6Alt"], original["U6Alt"]))
 	_check("food_stack U7", _date_eq(decoded["U7"], original["U7"]))
 
 
@@ -135,6 +148,15 @@ func _date_eq(a: Dictionary, b: Dictionary) -> bool:
 	return a["Year"] == b["Year"] and a["Month"] == b["Month"] \
 		and a["Day"] == b["Day"] and a["Hour"] == b["Hour"] \
 		and a["Minute"] == b["Minute"] and a["Second"] == b["Second"]
+
+
+func _str_eq(a: Variant, b: Variant) -> bool:
+	# Cross-type string equality: parsers store strings as PackedByteArray
+	# for byte-faithful round-trip, but in-memory test fixtures pass plain
+	# Strings. Compare via UTF-8 byte arrays so either side can be either.
+	var ab: PackedByteArray = a if a is PackedByteArray else String(a).to_utf8_buffer()
+	var bb: PackedByteArray = b if b is PackedByteArray else String(b).to_utf8_buffer()
+	return ab == bb
 
 
 func _test_food_round_trip() -> void:
@@ -174,7 +196,7 @@ func _test_food_round_trip() -> void:
 	_check("food U4", decoded["U4"] == original["U4"])
 	_check("food U5", decoded["U5"] == original["U5"])
 	_check("food U6 date", _date_eq(decoded["U6"], original["U6"]))
-	_check("food U7 nested food_stack U6", decoded["U7"]["U6"] == "first")
+	_check("food U7 nested food_stack U6", _str_eq(decoded["U7"]["U6"], "first"))
 
 
 func _test_cafe_object_leaf_round_trip() -> void:
@@ -292,7 +314,7 @@ func _test_serving_counter_round_trip() -> void:
 	_check("sc no fail", r.failed == false)
 	_check("sc NumFoodStacks", decoded["NumFoodStacks"] == 2)
 	_check("sc FoodStacks length", (decoded["FoodStacks"] as Array).size() == 2)
-	_check("sc FoodStacks[0].U6", (decoded["FoodStacks"] as Array)[0]["U6"] == "alpha")
+	_check("sc FoodStacks[0].U6", _str_eq((decoded["FoodStacks"] as Array)[0]["U6"], "alpha"))
 
 
 func _test_cafe_furniture_plain_round_trip() -> void:
@@ -389,3 +411,246 @@ func _first_diff(a: PackedByteArray, b: PackedByteArray) -> int:
 	if a.size() != b.size():
 		return n
 	return -1
+
+
+func _test_save_strings_round_trip() -> void:
+	var loader := LegacyLoader.new()
+	var writer := LegacyWriter.new()
+
+	var cases: Array = [
+		{"name": "raw count 0, zero strings",            "RawCount": 0, "Strings": []},
+		{"name": "raw count 1, zero strings (boundary)", "RawCount": 1, "Strings": []},
+		{"name": "raw count 2, one string",              "RawCount": 2, "Strings": ["first"]},
+		{"name": "raw count 5, four strings",            "RawCount": 5, "Strings": ["a", "b", "c", "d"]},
+	]
+
+	for c in cases:
+		var name: String = c["name"]
+		var original: Dictionary = {"RawCount": c["RawCount"], "Strings": c["Strings"]}
+
+		var w := BinaryWriter.make()
+		writer.write_save_strings(w, original)
+
+		var r := BinaryReader.wrap(w.to_bytes())
+		var decoded: Dictionary = loader.parse_save_strings(r)
+
+		_check("save_strings %s consumed" % name, r.remaining() == 0)
+		_check("save_strings %s no fail" % name, r.failed == false)
+		_check("save_strings %s RawCount" % name, int(decoded["RawCount"]) == int(original["RawCount"]))
+		_check("save_strings %s Strings deep-eq" % name, _string_array_eq(decoded["Strings"], original["Strings"]))
+
+
+func _string_array_eq(a: Array, b: Array) -> bool:
+	if a.size() != b.size():
+		return false
+	for i in range(a.size()):
+		if not _str_eq(a[i], b[i]):
+			return false
+	return true
+
+
+func _test_character_instance_round_trip() -> void:
+	var loader := LegacyLoader.new()
+	var writer := LegacyWriter.new()
+	var version: int = 63
+
+	# Mirrors Go's mainChar fixture in tool/file_types/roundtrip_test.go:463.
+	# U4=3.5 is exactly representable in float32, so no epsilon tolerance is needed.
+	var original: Dictionary = {
+		"Type": 1, "Name": "MainZombie",
+		"U2": 1, "U3": 2, "U4": 3.5, "U5": 4,
+		"U6": 1000000000, "U7": 5, "U8": 2000000000, "U9": 3000000000,
+		"U10": 10, "U11": 20, "U12": 30, "U13": 40,
+		"U14": 50, "U15": 60, "U16": 70,
+	}
+
+	var w := BinaryWriter.make()
+	writer.write_character_instance(w, original, version)
+	var r := BinaryReader.wrap(w.to_bytes())
+	var decoded: Dictionary = loader.parse_character_instance(r, version)
+
+	_check("char consumed", r.remaining() == 0)
+	_check("char no fail", r.failed == false)
+	_check("char Type", decoded["Type"] == 1)
+	_check("char Name", _str_eq(decoded["Name"], "MainZombie"))
+	_check("char U4 float32", decoded["U4"] == 3.5)
+	_check("char U6 large int64", decoded["U6"] == 1000000000)
+	_check("char U9 large int64", decoded["U9"] == 3000000000)
+	_check("char U13", decoded["U13"] == 40)
+	_check("char U14 (gated)", decoded["U14"] == 50)
+	_check("char U15 (gated)", decoded["U15"] == 60)
+	_check("char U16 (gated)", decoded["U16"] == 70)
+
+
+func _make_cafe_state_fixture() -> Dictionary:
+	# Mirrors Go's makeCafeStateFixture() — used here and in the SaveGame
+	# / FriendCafe in-memory fixture tests below.
+	var main_char: Dictionary = {
+		"Type": 1, "Name": "MainZombie",
+		"U2": 1, "U3": 2, "U4": 3.5, "U5": 4,
+		"U6": 1000000000, "U7": 5, "U8": 2000000000, "U9": 3000000000,
+		"U10": 10, "U11": 20, "U12": 30, "U13": 40,
+		"U14": 50, "U15": 60, "U16": 70,
+	}
+	var zombie: Dictionary = {
+		"Type": 2, "Name": "Z1",
+		"U2": 3, "U3": 4, "U4": 5.5, "U5": 6,
+		"U6": 1500000000, "U7": 7, "U8": 2500000000, "U9": 3500000000,
+		"U10": 11, "U11": 21, "U12": 31, "U13": 41,
+		"U14": 51, "U15": 61, "U16": 71,
+	}
+	return {
+		"U1": 123.456,
+		"ExperiencePoints": 999.5,
+		"Toxin": 50,
+		"Money": 500,
+		"Level": 5,
+		"U6": 1, "U7": 2,
+		"U8": 3.0, "U9": 4,
+		"U10": true,
+		"Character": main_char,
+		"NumZombies": 1,
+		"Zombies": [zombie],
+		"U11": 3,
+		"U12": [1, 2, 3],
+		"U13": true,
+	}
+
+
+func _test_cafe_state_round_trip() -> void:
+	var loader := LegacyLoader.new()
+	var writer := LegacyWriter.new()
+	var version: int = 63
+
+	var original: Dictionary = _make_cafe_state_fixture()
+
+	var w := BinaryWriter.make()
+	writer.write_cafe_state(w, original, version)
+	var r := BinaryReader.wrap(w.to_bytes())
+	var decoded: Dictionary = loader.parse_cafe_state(r, version)
+
+	_check("cafe_state consumed", r.remaining() == 0)
+	_check("cafe_state no fail", r.failed == false)
+	_check("cafe_state U1 float64", abs(float(decoded["U1"]) - 123.456) < 1e-12)
+	_check("cafe_state ExperiencePoints float32", abs(float(decoded["ExperiencePoints"]) - 999.5) < 1e-3)
+	_check("cafe_state Toxin", decoded["Toxin"] == 50)
+	_check("cafe_state Money", decoded["Money"] == 500)
+	_check("cafe_state Level", decoded["Level"] == 5)
+	_check("cafe_state Character.Name", _str_eq(decoded["Character"]["Name"], "MainZombie"))
+	_check("cafe_state NumZombies", decoded["NumZombies"] == 1)
+	_check("cafe_state Zombies[0].Name", _str_eq((decoded["Zombies"] as Array)[0]["Name"], "Z1"))
+	_check("cafe_state U11", decoded["U11"] == 3)
+	_check("cafe_state U12 length", (decoded["U12"] as Array).size() == 3)
+	_check("cafe_state U12[0]", (decoded["U12"] as Array)[0] == 1)
+	_check("cafe_state U13", decoded["U13"] == true)
+
+
+func _test_save_game_in_memory_round_trip() -> void:
+	var loader := LegacyLoader.new()
+	var writer := LegacyWriter.new()
+
+	var original: Dictionary = {
+		"Version": 63,
+		"State": _make_cafe_state_fixture(),
+		"PreStrings": {"RawCount": 3, "Strings": ["pre_alpha", "pre_beta"]},
+		"U15": {"Year": 2026, "Month": 4, "Day": 11, "Hour": 14, "Minute": 0, "Second": 0},
+		"PostStrings": {"RawCount": 2, "Strings": ["post_solo"]},
+		"U17": {"Year": 2026, "Month": 4, "Day": 11, "Hour": 14, "Minute": 30, "Second": 30},
+		"NumOrders": 0,
+		"U18": 7, "U19": 42, "U20": true,
+		"Trailing_b64": "",
+	}
+
+	var bytes: PackedByteArray = LegacyWriter.write_save_game_bytes(original)
+	var decoded: Dictionary = LegacyLoader.parse_save_game_bytes(bytes)
+
+	_check("save_game in-memory parsed non-empty", decoded.size() > 0)
+	_check("save_game in-memory Version", int(decoded["Version"]) == 63)
+	_check("save_game in-memory State.Money", int((decoded["State"] as Dictionary)["Money"]) == 500)
+	_check("save_game in-memory PreStrings.RawCount", int((decoded["PreStrings"] as Dictionary)["RawCount"]) == 3)
+	_check("save_game in-memory PreStrings[0]", _str_eq(((decoded["PreStrings"] as Dictionary)["Strings"] as Array)[0], "pre_alpha"))
+	_check("save_game in-memory U15 date", _date_eq(decoded["U15"], original["U15"]))
+	_check("save_game in-memory PostStrings.RawCount", int((decoded["PostStrings"] as Dictionary)["RawCount"]) == 2)
+	_check("save_game in-memory U17 date", _date_eq(decoded["U17"], original["U17"]))
+	_check("save_game in-memory NumOrders", int(decoded["NumOrders"]) == 0)
+	_check("save_game in-memory U18", int(decoded["U18"]) == 7)
+	_check("save_game in-memory U20", decoded["U20"] == true)
+	_check("save_game in-memory Trailing_b64 empty", String(decoded["Trailing_b64"]) == "")
+
+	# Re-encode the decoded dict and confirm bytes match
+	var bytes_again: PackedByteArray = LegacyWriter.write_save_game_bytes(decoded)
+	_check("save_game in-memory re-encode size", bytes_again.size() == bytes.size())
+	_check("save_game in-memory re-encode bytes match", bytes_again == bytes)
+
+
+func _test_save_game_fixtures() -> void:
+	for name in ["globalData.dat", "BACKUP1.dat"]:
+		var path: String = FIXTURES_DIR + "/" + name
+		var bytes_in: PackedByteArray = FileAccess.get_file_as_bytes(path)
+		_check("fixture %s loaded" % name, bytes_in.size() > 0,
+			"FileAccess.get_open_error=%d" % FileAccess.get_open_error())
+
+		var dict: Dictionary = LegacyLoader.parse_save_game_bytes(bytes_in)
+		_check("fixture %s parsed non-empty" % name, dict.size() > 0)
+		_check("fixture %s Version=63" % name, int(dict.get("Version", 0)) == 63)
+		_check("fixture %s Trailing_b64 non-empty" % name,
+			String(dict.get("Trailing_b64", "")) != "",
+			"trailing was empty — preservation field not populated?")
+
+		var bytes_out: PackedByteArray = LegacyWriter.write_save_game_bytes(dict)
+		_check("fixture %s round-trip size" % name,
+			bytes_out.size() == bytes_in.size(),
+			"in=%d out=%d" % [bytes_in.size(), bytes_out.size()])
+		_check("fixture %s round-trip byte-identical" % name,
+			bytes_in == bytes_out,
+			"first diff at byte %d" % _first_diff(bytes_in, bytes_out))
+
+
+func _test_friend_cafe_in_memory_round_trip() -> void:
+	# We can't easily build a Cafe-by-hand fixture for in-memory testing
+	# without re-implementing makeCafeFixture from the Go side. Instead,
+	# round-trip the playerCafe.caf bytes through parse_cafe so we get
+	# a known-good Cafe Dictionary, then wrap it in a FriendCafe envelope.
+	var cafe_bytes: PackedByteArray = FileAccess.get_file_as_bytes(FIXTURES_DIR + "/playerCafe.caf")
+	var cafe_dict: Dictionary = LegacyLoader.parse_cafe_bytes(cafe_bytes)
+	_check("friend_cafe in-memory: cafe sub-fixture loaded", cafe_dict.size() > 0)
+
+	var original: Dictionary = {
+		"Version": 63,
+		"State": _make_cafe_state_fixture(),
+		"Cafe": cafe_dict,
+	}
+
+	var bytes: PackedByteArray = LegacyWriter.write_friend_cafe_bytes(original)
+	var decoded: Dictionary = LegacyLoader.parse_friend_cafe_bytes(bytes)
+
+	_check("friend_cafe in-memory parsed non-empty", decoded.size() > 0)
+	_check("friend_cafe in-memory Version", int(decoded["Version"]) == 63)
+	_check("friend_cafe in-memory State.Money", int((decoded["State"] as Dictionary)["Money"]) == 500)
+	_check("friend_cafe in-memory Cafe.Version", int((decoded["Cafe"] as Dictionary)["Version"]) == 63)
+
+	var bytes_again: PackedByteArray = LegacyWriter.write_friend_cafe_bytes(decoded)
+	_check("friend_cafe in-memory re-encode size", bytes_again.size() == bytes.size())
+	_check("friend_cafe in-memory re-encode bytes match", bytes_again == bytes)
+
+
+func _test_friend_cafe_fixture() -> void:
+	var name: String = "ServerData.dat"
+	var path: String = FIXTURES_DIR + "/" + name
+	var bytes_in: PackedByteArray = FileAccess.get_file_as_bytes(path)
+	_check("fixture %s loaded" % name, bytes_in.size() > 0,
+		"FileAccess.get_open_error=%d" % FileAccess.get_open_error())
+
+	var dict: Dictionary = LegacyLoader.parse_friend_cafe_bytes(bytes_in)
+	_check("fixture %s parsed non-empty" % name, dict.size() > 0)
+	_check("fixture %s Version=63" % name, int(dict.get("Version", 0)) == 63)
+	_check("fixture %s Cafe.Version=63" % name,
+		int((dict.get("Cafe", {}) as Dictionary).get("Version", 0)) == 63)
+
+	var bytes_out: PackedByteArray = LegacyWriter.write_friend_cafe_bytes(dict)
+	_check("fixture %s round-trip size" % name,
+		bytes_out.size() == bytes_in.size(),
+		"in=%d out=%d" % [bytes_in.size(), bytes_out.size()])
+	_check("fixture %s round-trip byte-identical" % name,
+		bytes_in == bytes_out,
+		"first diff at byte %d" % _first_diff(bytes_in, bytes_out))
