@@ -160,6 +160,18 @@ Landed (Session 2 of 4 per `docs/superpowers/specs/2026-04-25-godot-save-format-
 - *(done)* Three more fixtures copied into `godot/test/fixtures/save/`: `globalData.dat` (1,626 B), `BACKUP1.dat` (1,556 B), `ServerData.dat` (20,747 B).
 - *(done)* `godot/test/test_save_round_trip.gd` extended with 8 new `_test_*` functions covering all five real fixtures plus boundary in-memory cases. Runner banner renamed to "Save round-trip results". Final count: **170 PASS / 0 FAIL**.
 
+Landed (Session 3 of 4 per `docs/superpowers/specs/2026-04-25-godot-save-format-bridge-design.md`):
+
+- *(done)* `tool/dump_legacy_fixtures/` — small standalone Go CLI that reads the 5 real device fixtures from `tool/file_types/testdata/`, parses them via the existing `Read*` functions, and emits PascalCase JSON to `godot/test/fixtures/save/<name>.json`. Run via `go run ./tool/dump_legacy_fixtures` whenever the Go parsers change. Output committed as the cross-validation oracle.
+- *(done)* `SaveGame.Trailing` field gained `json:"Trailing_b64"` struct tag so its JSON key matches the GDScript Dictionary's `Trailing_b64` key (the spec's `_b64` suffix convention). `FoodStack.U2` field (vestigial — Go declares it but never reads or writes it) gained `json:"-"` so it's excluded from the JSON oracle, matching the GDScript Dictionary which also omits it.
+- *(done)* 5 golden JSON files committed to `godot/test/fixtures/save/`.
+- *(done)* Layer 2 cross-validation: `_deep_equal` helper added to `test_save_round_trip.gd` plus `_test_layer2_cross_validation` exercising all 5 fixtures. Lossy on string fields (PackedByteArray UTF-8-decoded for compare) — Layer 1 already proves byte-faithfulness, so Layer 2's job is structural agreement only. The helper also handles null↔empty-array equivalence (Go marshals nil slices as `null`) and tolerates trailing U+FFFD on the String side (Godot's JSON parser substitutes embedded NULs with U+FFFD).
+- *(done)* `parse_food_stack` extended to pre-initialize all fields with zero defaults so the GDScript Dict shape is stable across versions and matches Go's struct-emit-all-fields semantics. Layer 1 byte-faithful round-trip is unaffected (the writer still gates field emission on version).
+- *(done)* `godot/scripts/save/save_v1.gd` — the going-forward JSON envelope. `save_save(envelope, path)` and `load_save(path)` plus a recursive `_to_json_safe` / `_from_json_safe` walker pair that round-trips `PackedByteArray` fields via the `{"_b64": "..."}` tagged-Dictionary convention (or plain JSON String when bytes are clean UTF-8). Migration dispatcher loop is scaffold-only at v1 — real migration files land when a real format change requires one.
+- *(done)* Layer 3 envelope round-trip: two envelopes (primary = globalData.dat + playerCafe.caf + ServerData.dat; backup = BACKUP1.dat + BACKUP1.caf + empty friendCafes) save → load → write_*_bytes back to byte-identical originals. Plus dispatcher rejection tests for v2 envelope, missing-version envelope, missing file, and non-object root.
+- *(done)* `.github/workflows/godot-validation.yml` extended with a "Run save round-trip tests" step that runs `test_save_round_trip.gd` after the existing asset validator. First green CI run on `main` is the Phase 3 spec's done signal.
+- *(done)* Final test runner count: **207 PASS / 0 FAIL**.
+
 Deliverables:
 - A GDScript/C# wrapper that calls into the Go `file_types` package (via a compiled shared library, or by round-tripping through JSON).
 - A test save file checked in under `godot/test/fixtures/`.

@@ -4,8 +4,18 @@ extends SceneTree
 ##   Session 1: primitive round-trip + Cafe fixture round-trip
 ##   Session 2: SaveGame + FriendCafe fixture round-trip
 ##   Session 3: cross-validation (Layer 2) + envelope round-trip (Layer 3)
+##
+## NOTE: Layer 2 cross-validation produces stderr lines like
+## "Unicode parsing error, some characters were replaced with � (U+FFFD)"
+## from Godot's JSON parser when fixture strings contain embedded NULs
+## (legacy `\r\0` suffixes inside CharacterInstance.Name). These are
+## diagnostic-only — _bytes_eq_string compensates for them. Not failures.
 
 const FIXTURES_DIR := "res://test/fixtures/save"
+
+## Numeric tolerance for Layer 2 cross-validation. Used both as an absolute
+## floor and as a relative scale factor — see _deep_equal for the rationale.
+const FLOAT_TOLERANCE: float = 1e-6
 
 var _passed: int = 0
 var _failed: int = 0
@@ -29,6 +39,10 @@ func _init() -> void:
 	_test_save_game_fixtures()
 	_test_friend_cafe_in_memory_round_trip()
 	_test_friend_cafe_fixture()
+	_test_deep_equal_helper()
+	_test_layer2_cross_validation()
+	_test_layer3_envelope_round_trip()
+	_test_layer3_dispatcher_rejection()
 
 	print("\n=== Save round-trip results: %d passed, %d failed ===" % [_passed, _failed])
 	if _failed > 0:
@@ -413,6 +427,156 @@ func _first_diff(a: PackedByteArray, b: PackedByteArray) -> int:
 	return -1
 
 
+func _deep_equal(a: Variant, b: Variant) -> bool:
+	# Layer 2 cross-validation helper: structural agreement between
+	# GDScript-parsed Dictionary and Go-via-JSON Dictionary. Lossy on
+	# string fields (PackedByteArray bytes are UTF-8-decoded for compare).
+	# Tolerant to trailing NULs and to int-vs-float coercion from JSON.
+
+	# PackedByteArray on both sides → exact bytes
+	if a is PackedByteArray and b is PackedByteArray:
+		return a == b
+
+	# PackedByteArray vs String → lossy UTF-8 compare
+	if a is PackedByteArray and b is String:
+		return _bytes_eq_string(a, b)
+	if a is String and b is PackedByteArray:
+		return _bytes_eq_string(b, a)
+
+	# Dictionary recursion
+	if a is Dictionary and b is Dictionary:
+		if a.size() != b.size():
+			return false
+		for k in a:
+			if not b.has(k):
+				return false
+			if not _deep_equal(a[k], b[k]):
+				return false
+		return true
+
+	# Array recursion
+	if a is Array and b is Array:
+		if a.size() != b.size():
+			return false
+		for i in range(a.size()):
+			if not _deep_equal(a[i], b[i]):
+				return false
+		return true
+
+	# null / empty array equivalence: Go marshals nil slices as `null`
+	# (e.g. SaveStrings.Strings when empty), GDScript stores `[]`. Treat
+	# them as structurally equal — both encode "no elements".
+	if a == null and b is Array and (b as Array).size() == 0:
+		return true
+	if b == null and a is Array and (a as Array).size() == 0:
+		return true
+
+	# Numeric coercion (JSON parses every number to float). Tolerance is
+	# both absolute and relative: Go's json.Marshal of float32 emits the
+	# shortest decimal representation, and JSON.parse_string in Godot
+	# reconstructs a float64 that differs from the original float32 by up
+	# to half a ULP at float32 precision (~1e-7 relative). FLOAT_TOLERANCE
+	# (1e-6) serves as both the absolute floor and the relative scale —
+	# float32 mantissa is 23 bits (~6e-8 ULP fraction) and the JSON
+	# shortest-repr can lose another factor of ~5, so 1e-6 of magnitude
+	# is a safe upper bound.
+	if (a is int or a is float) and (b is int or b is float):
+		var fa: float = float(a)
+		var fb: float = float(b)
+		var tol: float = max(FLOAT_TOLERANCE, max(abs(fa), abs(fb)) * FLOAT_TOLERANCE)
+		return abs(fa - fb) < tol
+
+	# Bool, null, identical strings, etc.
+	return a == b
+
+
+func _bytes_eq_string(bytes: PackedByteArray, s: String) -> bool:
+	# Strip trailing NUL bytes from the PackedByteArray side (legacy `\r\0`
+	# suffixes that Godot's String can't represent). Then UTF-8 decode and
+	# compare. Godot's JSON parser converts embedded NUL (``) bytes
+	# into U+FFFD (replacement character), so trailing U+FFFDs on the String
+	# side correspond to trailing NULs in the original bytes.
+	var trimmed: PackedByteArray = bytes
+	while trimmed.size() > 0 and trimmed[trimmed.size() - 1] == 0:
+		trimmed = trimmed.slice(0, trimmed.size() - 1)
+	var decoded: String = trimmed.get_string_from_utf8()
+	# Strip trailing NUL or U+FFFD (replacement char) from the String side.
+	var s_trimmed: String = s
+	while s_trimmed.length() > 0:
+		var last: int = s_trimmed.unicode_at(s_trimmed.length() - 1)
+		if last == 0 or last == 0xFFFD:
+			s_trimmed = s_trimmed.substr(0, s_trimmed.length() - 1)
+		else:
+			break
+	return decoded == s_trimmed
+
+
+func _test_deep_equal_helper() -> void:
+	# Identity
+	_check("deep_equal int identity", _deep_equal(42, 42))
+	_check("deep_equal string identity", _deep_equal("hello", "hello"))
+	_check("deep_equal dict identity", _deep_equal({"a": 1, "b": 2}, {"a": 1, "b": 2}))
+
+	# Numeric coercion (JSON returns floats)
+	_check("deep_equal int vs float", _deep_equal(42, 42.0))
+
+	# Cross-type string: PackedByteArray vs String (clean ASCII)
+	var clean_bytes := "hello".to_utf8_buffer()
+	_check("deep_equal PBA vs String (clean)", _deep_equal(clean_bytes, "hello"))
+
+	# Cross-type string: PackedByteArray with trailing NUL vs String without
+	var nul_bytes := PackedByteArray([89, 111, 117, 13, 0])  # "You\r\0"
+	_check("deep_equal PBA(NUL) vs String('You\\r')", _deep_equal(nul_bytes, "You\r"))
+
+	# Dictionary recursion
+	_check("deep_equal nested dict", _deep_equal(
+		{"a": {"b": [1, 2, 3]}},
+		{"a": {"b": [1.0, 2.0, 3.0]}},
+	))
+
+	# Negative cases
+	_check("deep_equal differs (size)", not _deep_equal({"a": 1}, {"a": 1, "b": 2}))
+	_check("deep_equal differs (key)", not _deep_equal({"a": 1}, {"b": 1}))
+	_check("deep_equal differs (value)", not _deep_equal({"a": 1}, {"a": 2}))
+	_check("deep_equal differs (array length)", not _deep_equal([1, 2], [1, 2, 3]))
+
+
+func _test_layer2_cross_validation() -> void:
+	# Each fixture: parse via GDScript -> Dict; load Go-produced JSON -> Dict;
+	# deep-equal them. Catches structural divergence between the two parsers.
+	var cases: Array = [
+		# [fixture name, parser kind]
+		["playerCafe.caf", "cafe"],
+		["BACKUP1.caf", "cafe"],
+		["globalData.dat", "save_game"],
+		["BACKUP1.dat", "save_game"],
+		["ServerData.dat", "friend_cafe"],
+	]
+	for c in cases:
+		var name: String = c[0]
+		var kind: String = c[1]
+
+		var bytes_path: String = FIXTURES_DIR + "/" + name
+		var bytes_in: PackedByteArray = FileAccess.get_file_as_bytes(bytes_path)
+		var dict_gd: Dictionary
+		match kind:
+			"cafe":
+				dict_gd = LegacyLoader.parse_cafe_bytes(bytes_in)
+			"save_game":
+				dict_gd = LegacyLoader.parse_save_game_bytes(bytes_in)
+			"friend_cafe":
+				dict_gd = LegacyLoader.parse_friend_cafe_bytes(bytes_in)
+
+		var json_path: String = FIXTURES_DIR + "/" + name + ".json"
+		var json_text: String = FileAccess.get_file_as_string(json_path)
+		var dict_go: Variant = JSON.parse_string(json_text)
+		_check("L2 %s json parsed" % name, dict_go is Dictionary,
+			"JSON.parse_string returned %s, expected Dictionary" % typeof(dict_go))
+
+		_check("L2 %s deep_equal" % name, _deep_equal(dict_gd, dict_go),
+			"GDScript-parsed Dict shape disagrees with Go JSON oracle")
+
+
 func _test_save_strings_round_trip() -> void:
 	var loader := LegacyLoader.new()
 	var writer := LegacyWriter.new()
@@ -654,3 +818,101 @@ func _test_friend_cafe_fixture() -> void:
 	_check("fixture %s round-trip byte-identical" % name,
 		bytes_in == bytes_out,
 		"first diff at byte %d" % _first_diff(bytes_in, bytes_out))
+
+
+func _test_layer3_envelope_round_trip() -> void:
+	# Build envelope from real fixtures, save_save, load_save, re-encode each
+	# fixture from the loaded envelope, compare to original bytes.
+	var save_bytes: PackedByteArray = FileAccess.get_file_as_bytes(FIXTURES_DIR + "/globalData.dat")
+	var cafe_bytes: PackedByteArray = FileAccess.get_file_as_bytes(FIXTURES_DIR + "/playerCafe.caf")
+	var fc_bytes: PackedByteArray = FileAccess.get_file_as_bytes(FIXTURES_DIR + "/ServerData.dat")
+
+	var envelope: Dictionary = {
+		"version": SaveV1.CURRENT_VERSION,
+		"playerSave": LegacyLoader.parse_save_game_bytes(save_bytes),
+		"playerCafe": LegacyLoader.parse_cafe_bytes(cafe_bytes),
+		"friendCafes": [LegacyLoader.parse_friend_cafe_bytes(fc_bytes)],
+	}
+
+	var path: String = "user://test_save_primary.json"
+	var save_err: Error = SaveV1.save_save(envelope, path)
+	_check("L3 primary save_save OK", save_err == OK,
+		"save_save returned err=%d" % save_err)
+
+	var loaded: Dictionary = SaveV1.load_save(path)
+	_check("L3 primary load_save non-empty", loaded.size() > 0)
+	_check("L3 primary version", int(loaded["version"]) == 1)
+	_check("L3 primary savedAt present", String(loaded.get("savedAt", "")) != "")
+
+	# Re-encode each component and compare to original bytes.
+	var save_out: PackedByteArray = LegacyWriter.write_save_game_bytes(loaded["playerSave"] as Dictionary)
+	_check("L3 primary playerSave round-trip", save_out == save_bytes,
+		"first diff at byte %d" % _first_diff(save_bytes, save_out))
+
+	var cafe_out: PackedByteArray = LegacyWriter.write_cafe_bytes(loaded["playerCafe"] as Dictionary)
+	_check("L3 primary playerCafe round-trip", cafe_out == cafe_bytes,
+		"first diff at byte %d" % _first_diff(cafe_bytes, cafe_out))
+
+	var fc_out: PackedByteArray = LegacyWriter.write_friend_cafe_bytes((loaded["friendCafes"] as Array)[0] as Dictionary)
+	_check("L3 primary friendCafe round-trip", fc_out == fc_bytes,
+		"first diff at byte %d" % _first_diff(fc_bytes, fc_out))
+
+	# Backup envelope: BACKUP1.dat + BACKUP1.caf, empty friendCafes.
+	var bsave_bytes: PackedByteArray = FileAccess.get_file_as_bytes(FIXTURES_DIR + "/BACKUP1.dat")
+	var bcafe_bytes: PackedByteArray = FileAccess.get_file_as_bytes(FIXTURES_DIR + "/BACKUP1.caf")
+
+	var benvelope: Dictionary = {
+		"version": SaveV1.CURRENT_VERSION,
+		"playerSave": LegacyLoader.parse_save_game_bytes(bsave_bytes),
+		"playerCafe": LegacyLoader.parse_cafe_bytes(bcafe_bytes),
+		"friendCafes": [],
+	}
+
+	var bpath: String = "user://test_save_backup.json"
+	_check("L3 backup save_save OK", SaveV1.save_save(benvelope, bpath) == OK)
+	var bloaded: Dictionary = SaveV1.load_save(bpath)
+	_check("L3 backup load_save non-empty", bloaded.size() > 0)
+	_check("L3 backup friendCafes empty", (bloaded["friendCafes"] as Array).size() == 0)
+
+	var bsave_out: PackedByteArray = LegacyWriter.write_save_game_bytes(bloaded["playerSave"] as Dictionary)
+	_check("L3 backup playerSave round-trip", bsave_out == bsave_bytes,
+		"first diff at byte %d" % _first_diff(bsave_bytes, bsave_out))
+
+	var bcafe_out: PackedByteArray = LegacyWriter.write_cafe_bytes(bloaded["playerCafe"] as Dictionary)
+	_check("L3 backup playerCafe round-trip", bcafe_out == bcafe_bytes,
+		"first diff at byte %d" % _first_diff(bcafe_bytes, bcafe_out))
+
+
+func _test_layer3_dispatcher_rejection() -> void:
+	# A v2 envelope must be rejected (forward-only — clients never downgrade).
+	var v2_path: String = "user://test_save_v2.json"
+	var v2_text: String = '{"version":2,"playerSave":{},"playerCafe":{},"friendCafes":[]}'
+	var f: FileAccess = FileAccess.open(v2_path, FileAccess.WRITE)
+	f.store_string(v2_text)
+	f.close()
+
+	var v2_loaded: Dictionary = SaveV1.load_save(v2_path)
+	_check("L3 dispatcher rejects v2 envelope", v2_loaded.size() == 0,
+		"expected empty Dict on rejection, got %d keys" % v2_loaded.size())
+
+	# An envelope missing the version field must also be rejected.
+	var miss_path: String = "user://test_save_no_version.json"
+	var miss_text: String = '{"playerSave":{},"playerCafe":{},"friendCafes":[]}'
+	var f2: FileAccess = FileAccess.open(miss_path, FileAccess.WRITE)
+	f2.store_string(miss_text)
+	f2.close()
+
+	var miss_loaded: Dictionary = SaveV1.load_save(miss_path)
+	_check("L3 dispatcher rejects missing-version envelope", miss_loaded.size() == 0)
+
+	# A missing file must also be rejected gracefully (not crash).
+	var missing_loaded: Dictionary = SaveV1.load_save("user://does_not_exist.json")
+	_check("L3 dispatcher rejects missing file", missing_loaded.size() == 0)
+
+	# A non-object top-level (e.g. JSON array) must be rejected.
+	var arr_path: String = "user://test_save_array.json"
+	var f3: FileAccess = FileAccess.open(arr_path, FileAccess.WRITE)
+	f3.store_string('[1,2,3]')
+	f3.close()
+	var arr_loaded: Dictionary = SaveV1.load_save(arr_path)
+	_check("L3 dispatcher rejects non-object root", arr_loaded.size() == 0)

@@ -33,3 +33,6 @@ jobs:
 
       - name: Run validation script
         run: ./${GODOT_BIN} --headless --path godot/ --script res://validate_assets.gd
+
+      - name: Run save round-trip tests
+        run: ./${GODOT_BIN} --headless --path godot/ --script res://test/test_save_round_trip.gd

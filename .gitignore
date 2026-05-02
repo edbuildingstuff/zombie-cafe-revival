@@ -6,3 +6,5 @@ src/lib/cpp/build/*
 .vscode/settings.json
 server/wrangler.toml
 godot/.godot/
+tool/dump_legacy_fixtures/dump_legacy_fixtures
+tool/dump_legacy_fixtures/dump_legacy_fixtures.exe

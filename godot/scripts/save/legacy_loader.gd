@@ -69,7 +69,15 @@ func parse_cafe(r: BinaryReader) -> Dictionary:
 
 
 func parse_food_stack(r: BinaryReader, version: int) -> Dictionary:
-	var d: Dictionary = {}
+	# Initialize all fields with zero defaults so the dict shape is stable
+	# across versions and matches Go's struct-field-always-present JSON
+	# output. U4 is only read for legacy version <= 48; modern v63 saves
+	# leave it at 0 here just like Go does on its struct.
+	var d: Dictionary = {
+		"U0": 0, "U1": 0, "U3": 0, "U4": 0,
+		"U5": 0, "U6": "", "U6Alt": "",
+		"U7": {"Year": 0, "Month": 0, "Day": 0, "Hour": 0, "Minute": 0, "Second": 0},
+	}
 	if version > 24:
 		d["U0"] = r.read_byte()
 	d["U1"] = r.read_byte()

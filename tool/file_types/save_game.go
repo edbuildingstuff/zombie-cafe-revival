@@ -73,7 +73,8 @@ type SaveGame struct {
 	// Storing the remainder as opaque bytes keeps the Phase 0b round-trip
 	// contract intact while the schema work is deferred. In-memory fixture
 	// tests leave this empty and the writer skips the emission when it is.
-	Trailing []byte
+	// JSON tag aligns with the GDScript Dictionary's "Trailing_b64" key.
+	Trailing []byte `json:"Trailing_b64"`
 }
 
 func readSaveStrings(file io.Reader) SaveStrings {

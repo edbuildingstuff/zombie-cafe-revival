@@ -6,4 +6,5 @@ use (
 	./tool/file_types
 	./tool/server
 	./tool/cctpacker
+	./tool/dump_legacy_fixtures
 )

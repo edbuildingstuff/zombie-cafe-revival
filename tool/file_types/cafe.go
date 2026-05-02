@@ -68,11 +68,15 @@ type CafeTile struct {
 }
 
 type FoodStack struct {
-	U0    byte   // only present when version > 24; previously overwritten by U1 and lost
-	U1    byte
-	U2    byte   // vestigial — never read or written, kept for backwards compatibility
-	U3    int32  // only present when version > 48
-	U4    int16  // only present when version <= 48
+	U0 byte // only present when version > 24; previously overwritten by U1 and lost
+	U1 byte
+	// U2 is vestigial — never read or written, kept on the struct for
+	// backwards compatibility with old code that referenced the field.
+	// `json:"-"` keeps it out of the Layer 2 oracle, which mirrors the
+	// design intent that GDScript's FoodStack Dict also omits U2.
+	U2    byte `json:"-"`
+	U3    int32 // only present when version > 48
+	U4    int16 // only present when version <= 48
 	U5    byte
 	U6    string
 	U6Alt string // always present; previously discarded by the reader
