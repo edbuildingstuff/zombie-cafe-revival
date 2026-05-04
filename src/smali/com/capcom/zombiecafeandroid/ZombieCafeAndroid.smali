@@ -5912,3 +5912,26 @@
 
     return-void
 .end method
+
+.method public onWindowFocusChanged(Z)V
+    .locals 2
+
+    invoke-super {p0, p1}, Landroid/app/Activity;->onWindowFocusChanged(Z)V
+
+    if-eqz p1, :end
+
+    invoke-virtual {p0}, Landroid/app/Activity;->getWindow()Landroid/view/Window;
+    move-result-object v0
+
+    invoke-virtual {v0}, Landroid/view/Window;->getDecorView()Landroid/view/View;
+    move-result-object v0
+
+    const v1, 0x1F06
+    invoke-virtual {v0, v1}, Landroid/view/View;->setSystemUiVisibility(I)V
+
+    const/high16 v1, -0x1000000
+    invoke-virtual {v0, v1}, Landroid/view/View;->setBackgroundColor(I)V
+
+:end
+    return-void
+.end method
