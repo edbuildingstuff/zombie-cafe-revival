@@ -27,16 +27,28 @@ var _sprite: Sprite2D
 func init(atlas: SpriteAtlas) -> void:
 	_sprite = Sprite2D.new()
 	_sprite.centered = true
-	# Placeholder: pick any boxer-human piece. The body is recognizable.
-	# Real 27-piece skeletal customer is Session 6.
+	# Placeholder: pick boxer-human's head1.png — the largest single piece
+	# (93x90) so the customer is recognizable at the camera's 0.4x zoom.
+	# Boxer-human piece order in the characterParts atlas (verified via
+	# offsets manifest):
+	#   [0]=0-spacer, [1]=1x1, [2]=1x1_front, [3..7]=back_head/arms/legs,
+	#   [8]=back_pelvis(3x3 spacer), [9..13]=back_arms/legs/torso,
+	#   [14..15]=chairback(3x3 spacers), [16]=head1, [17..20]=front limbs,
+	#   [21]=pelvis(spacer), [22..25]=front limbs, [26]=torso1.
+	# Index 16 (head1) is the most visually distinctive single piece.
+	# A previous attempt used index 12 (back_rightleg2.png, 22x31) which
+	# was too small to see at camera zoom 0.4.
+	# Real 27-piece skeletal assembly is Session 6.
 	var pieces: Array = atlas.get_character_pieces("boxer-human")
 	if pieces.is_empty():
 		push_warning("CustomerActor: no boxer-human pieces in atlas; sprite will be invisible")
 	else:
-		# Pick a piece that's visually distinct — index 12 is typically the body
-		# in this atlas; clamp defensively.
-		var idx: int = mini(12, pieces.size() - 1)
+		var idx: int = mini(16, pieces.size() - 1)
 		_sprite.texture = pieces[idx]
+	# Scale up 2x for visibility at the camera's 0.4x zoom — net on-screen
+	# size is ~74x72 px, comparable to a tile sprite. Drop this when the
+	# real skeletal customer lands in Session 6.
+	_sprite.scale = Vector2(2.0, 2.0)
 	add_child(_sprite)
 
 
