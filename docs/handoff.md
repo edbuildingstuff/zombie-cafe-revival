@@ -1,6 +1,6 @@
 # Session Handoff — Zombie Cafe Revival
 
-**Last updated:** 2026-05-10 (after Phase 3 close-out; previous: 2026-04-25 Phase 3 Session 1, 2026-04-19 Scudo crash hunt, 2026-04-12 IAP bypass)
+**Last updated:** 2026-05-10 (after Phase 4 Sessions 1 + 1.5 + 2 land; previous: same-day Phase 3 close-out, 2026-04-25 Phase 3 Session 1, 2026-04-19 Scudo crash hunt, 2026-04-12 IAP bypass)
 **Purpose:** quick orientation for a fresh session. Self-contained; read this plus `docs/devlog/2026-05-10-phase-3-save-format.md` and `docs/rewrite-plan.md` and you should be able to continue without re-reading the full devlog history.
 
 ---
@@ -13,19 +13,25 @@
 
 ## Where we are
 
-**Phase 3 is closed.** The Godot client owns the save format end-to-end — five real device fixtures across three formats round-trip byte-identically through pure GDScript, a JSON envelope at `user://save.json` is the going-forward save format, and CI runs the test runner on every push (**207 PASS / 0 FAIL**). The longest-standing open question in the rewrite plan ("Go ↔ Godot integration path is undecided") is settled in favor of **option 3: GDScript port** — over GDExtension's per-platform native matrix or a subprocess at asset-import time only — because cross-platform reach (web, iOS) makes options 1 and 2 untenable. See `docs/devlog/2026-05-10-phase-3-save-format.md` for the full story.
+**Phase 4 Sessions 1, 1.5, and 2 are landed.** Opening `godot/project.godot` and pressing Run shows the player's actual cafe rendered isometrically from `playerCafe.caf` (1925 floor tiles + 29 cafe-objects from the saved layout) plus a customer entity that spawns at the cafe's "north" tip every 5 seconds, walks down-and-right to a free chair via manual lerp motion, sits 2 seconds, and despawns. Validator at 17/17, save round-trip 207/0. Three of seven Phase 4 sessions remain: order + kitchen state, payment + XP, interactive furniture placement, character roster, close-out.
+
+**Phase 3 is closed.** Five real device fixtures round-trip byte-identically through pure GDScript; the JSON envelope at `user://save.json` is the going-forward format; CI runs the test runner on every push. The Go ↔ Godot integration question settled in favor of option 3 (GDScript port). See `docs/devlog/2026-05-10-phase-3-save-format.md`.
 
 **Phase status by phase:**
 
 - **Phase 0a (done):** file_types validation harness. Round-trip tests for every format passing.
 - **Phase 0b (done, including real fixtures):** lossless parsers and symmetric writers for every binary format. Real device fixtures live under `tool/file_types/testdata/` — `playerCafe.caf` + `BACKUP1.caf` (Cafe), `globalData.dat` + `BACKUP1.dat` (SaveGame, with `Trailing []byte` preservation field), `ServerData.dat` (FriendCafe). All round-trip byte-identically.
 - **Phase 1a (done):** `-target godot` flag on `build_tool`.
-- **Phase 1b (almost fully done):** atlas packing, animation parser, six opaque binary parsers, debug print sweep, atlas-only output (66% size reduction). Pending: `constants.bin.mid` (mixed endian), `font3.bin.mid` (custom bitmap format). Bitmap font conversion (item 4) and social icon copy (item 7) also pending but low-priority cosmetic.
-- **Phase 1 validation (done):** 15/15 validation checks passing via `godot/validate_assets.gd` + GitHub Actions CI.
+- **Phase 1b (almost fully done):** atlas packing, animation parser, six opaque binary parsers, debug print sweep, atlas-only output (66% size reduction). `mapTiles` atlas added in Phase 4 Session 1 (8th atlas in the Godot tree — turned out to be the world-map overview, useful for Phase 5). Pending: `constants.bin.mid` (mixed endian), `font3.bin.mid` (custom bitmap format). Bitmap font conversion (item 4) and social icon copy (item 7) also pending but low-priority cosmetic.
+- **Phase 1 validation (done):** 17/17 validation checks passing via `godot/validate_assets.gd` + GitHub Actions CI.
 - **Phase 2a (done):** `SpriteAtlas` with O(1) per-character piece lookup.
-- **Phase 2b (done):** `godot/main.tscn` + `main_scene.gd` + the pose function reading `sitSW.json`. Open `godot/project.godot` in Godot 4 → Run → shows boxer-human posed. Cafe background still pending (blocked on `mapTiles` packer re-enablement).
-- **Phase 3 (done, 2026-04-25 → 2026-05-10):** Pure GDScript port of the Go save-family parsers and writers. `godot/scripts/save/{binary_reader,binary_writer,legacy_loader,legacy_writer,save_v1}.gd` plus `godot/test/test_save_round_trip.gd` plus `tool/dump_legacy_fixtures/`. Three test layers green: Layer 1 byte-identical round-trip on all 5 real fixtures, Layer 2 Go-Dict ↔ GDScript-Dict cross-validation against committed JSON oracles, Layer 3 envelope round-trip. CI runs the test runner on every push. **207 PASS / 0 FAIL.** Sessions: 1 (`d02a00de`, primitives + Cafe), 2 (`0b059166`, SaveGame + FriendCafe), 3 (`c3f90174`, oracle + envelope + CI), 4 (this handoff + devlog).
-- **Phase 4 (next):** game tick loop. Customers spawn, walk to tables, order food, wait for the stove, eat, pay, and leave. XP and money update.
+- **Phase 2b (done):** `godot/main.tscn` + `main_scene.gd` + the pose function reading `sitSW.json`. Cafe background closed in Phase 4 Session 1 (was previously deferred).
+- **Phase 3 (done, 2026-04-25 → 2026-05-10):** Pure GDScript port of the Go save-family parsers and writers. 4 sessions, 207/0 in CI.
+- **Phase 4 (in progress, 2 of 7 sessions + Session 1.5 polish):**
+  - **Session 1 (done, `705a760b`):** Cafe rendering from save Dict via `CafeRenderer` (floor + walls + furniture). All elements share the existing `furniture` atlas — Session 1's RE finding was that the umbrella spec's "mapTiles holds floor tiles" hypothesis was wrong (mapTiles is the world-map overview view used by Phase 5). Direct lookup `region = "%d.png" % U1`.
+  - **Session 1.5 (done, `576af897`):** Iso projection. Session 1 used Cartesian `(tx*50, ty*50)` which produced visible zigzag along long pavement edges; Session 1.5 corrected to `((tx-ty)*50, (tx+ty)*25)` so diamond edges chain into continuous lines. Camera2D moved to `(-418, 1153)` zoom `0.25` to fit new bounds. Plus `cb556725` uncrops the customer sprite by moving spawn from `(0, -100)` to `(0, 0)`.
+  - **Session 2 (done, `2276edf2` + fix commits `a38c8065` + `cf48c821`):** `GameState` autoload + `CustomerSystem` + `CustomerActor`. Single concurrent customer; `tick(delta)` driven from `main_scene._process`. Reads `Cafe.Tiles[].U5/U7/U9.Furniture.FurnitureType == 3` for chairs (umbrella spec said `=2` but `cafe.go:36` confirms `2=ServingCounter`). Two follow-up fix commits resolved blank-scene issues — see Gotchas.
+  - **Sessions 3-7 remain:** order + kitchen state, payment/XP, interactive furniture placement, character roster, close-out.
 - **Phase 5 (unblocked):** online features. Server upload of binary saves now plumbable against the GDScript writer (`write_save_game(dict) -> PackedByteArray`).
 
 **Legacy APK on hardware is stable.** The 2026-04-19 session tracked down the `Scudo: corrupted chunk header` crashes that had been firing every few minutes. Root cause: two sibling off-by-one bugs in the game's JNI MD5 wrappers (`javaMD5String+102` and `javaMD5Data+126`), both writing `\0` one byte past their `new char[32]` allocation. Fix is a 1-byte patch at each site flipping `movs r3, #0x20` → `movs r3, #0x1F` so the terminator lands at `buf[31]` in-bounds. A separate Bug 1 (`SoundManager.playSound → MediaPlayer.release → RefBase::decStrong → scudo_free` on every character SFX) was initially worked around by NOPing `javaStartEffect+50`, but with the source corruption from javaMD5 fixed the SFX path was provably clean — the NOP was reverted in `2ebcfc35` to restore character SFX. See `docs/devlog/2026-04-19-scudo-crash-hunt.md` for the diagnostic trail. Validated stable on a Samsung Note 20 Ultra (Android 13) for multi-minute raid sessions.
@@ -34,39 +40,46 @@
 
 **Facebook invite-friends rebrand (`f23cef1a`)** points the dialog at `https://github.com/edbuildingstuff` and adds a back-button-dismissable WebView fix (was unkillable due to a threading bug in the original FB SDK).
 
-**Nothing is broken.** Full workspace builds clean (`file_types`, `resource_manager`, `build_tool`, `cctpacker`, `dump_legacy_fixtures` native; `server` under `GOOS=js GOARCH=wasm`). All Go tests green. Headless Godot validation passes 15/15. Phase 3 save round-trip runner passes 207/0.
+**Nothing is broken.** Full workspace builds clean (`file_types`, `resource_manager`, `build_tool`, `cctpacker`, `dump_legacy_fixtures` native; `server` under `GOOS=js GOARCH=wasm`). All Go tests green. Headless Godot validation passes 17/17. Phase 3 save round-trip runner passes 207/0. Pavement edges in the rendered cafe chain as continuous diagonal lines (iso); customer sprite is fully visible on spawn.
 
 ---
 
 ## What to do next
 
-### Option A — Phase 4: game tick loop *(recommended)*
+### Option A — Phase 4 Session 3: order + kitchen state *(recommended)*
 
-Phase 3 closed the save-load fidelity contract; Phase 4 is now the next active phase. Customers spawn, walk to tables, order food, wait for the stove, eat, pay, and leave. XP and money update. The player can place furniture and buy characters. No online features, no billing, no Facebook.
+The next vertical slice in Phase 4. Sessions 1-2 established the architectural pattern (`GameState` autoload + per-system `tick(delta)` + signal bus + `CustomerActor` lifecycle); Session 3 extends it to the customer-order interaction:
 
-This is where the bulk of the reverse engineering effort goes. For each behavior, the order of operations is:
+- Customer reaches a chair (Session 2 done) → raises an order bubble (new visual on `CustomerActor`).
+- `KitchenSystem` (new sub-system) tracks stove state (idle / assigned / cooking / done). Reads `Cafe.Tiles[].U5/U7/U9.Furniture` for `FurnitureType == 1` (Stove) and `== 2` (ServingCounter) — both confirmed via `cafe.go:36`.
+- A stove "cooks" for some duration (Phase 4 RE — likely needs Ghidra on `libZombieCafeAndroid.so` to find the cook-duration table; alternatively `cookbookData.bin.mid.json` may carry it).
+- When cooking finishes, food appears on a serving counter; customer walks to the counter, fetches food, returns to seat, "eats" (timer), then leaves (existing despawn logic).
 
-1. Check the original `libZombieCafeAndroid.so` in Ghidra, using the offsets already labelled in `src/lib/cpp/ZombieCafeExtension.cpp` as anchors.
-2. Write a devlog entry describing the behavior in plain English.
-3. Implement it in Godot.
-4. If the behavior is exposed in a save file field (e.g., a timer, a cooldown), verify by loading a legacy save and confirming the values match expectations.
+**Per the Phase 4 spec template (sessions get their own implementation plans),** start by writing `docs/superpowers/plans/2026-05-XX-phase-4-session-3-order-kitchen.md` mirroring the Session 2 plan structure. Open questions to resolve early in the plan-writing:
 
-**First step:** write a Phase 4 design spec at `docs/superpowers/specs/2026-05-XX-phase-4-game-tick-design.md` covering the sub-system breakdown (customer spawning, pathfinding, food orders, kitchen state, payment/XP, furniture placement, character purchasing) and the per-sub-system reverse engineering anchor points. Then break Phase 4 into sessions like Phase 3 was — each session a vertical slice (e.g., "customer spawn + walk to seat" as Session 1).
+- What's the cook duration? (`cookbookData.bin.mid.json` first, then Ghidra)
+- How does the customer know what to order? (random from menu, or driven by a save field?)
+- Where does the served food appear visually? (sprite from furniture atlas, indexed by what?)
+
+The Session 1 + 2 file structure is the template (`scripts/systems/<system>.gd` + autoload integration + 18th validator check).
 
 ### Option B — Phase 1b stragglers: `constants.bin.mid` or `font3.bin.mid`
 
-Both deferred during the Phase 1b megasession because their formats resist quick analysis. Each would be its own focused session.
+Both deferred during the Phase 1b megasession because their formats resist quick analysis. `constants.bin.mid` may actually contain Phase 4 game-balance constants (cook durations, customer spawn rates, XP curves, payment formulas) — which would make it directly relevant to Sessions 3-4. Investigating its structure could unblock or accelerate Session 3.
 
 - **`constants.bin.mid`** (9789 bytes): mixed-endian, first 12 bytes look like BE int32s (`1000, 10000, 3000`), subsequent floats only decode under LE. Differential analysis across similar files OR a Ghidra pass would help.
 - **`font3.bin.mid`** (2533 bytes): custom bitmap font format — NOT standard BMFont. Would need its own RE investigation.
 
-Medium-value. Closes the Phase 1b item 3 list entirely.
+### Option C — Multi-customer + A* pathfinding (Session 2.5)
 
-### Option C — Phase 1b polish: bitmap font conversion (item 4) + social icon copy (item 7)
+Session 2 is intentionally minimum-viable: max 1 concurrent customer; linear lerp passes through walls. A Session 2.5 could lift these:
+- Track multiple `CustomerActor`s in `CustomerSystem` (currently a single `_active_customer`).
+- Replace `_advance_walk`'s linear lerp with A* over the tile grid, blocking on `FurnitureType != 0` tiles.
+- Spawn rate variation per save state (early-game vs late-game cafe).
 
-Lower-value cosmetic items deferred from Phase 1b. `A Love of Thunder.ttf` already rasterizes via Godot's built-in TTF renderer, so the bitmap font work only matters if the original look needs preserving. Social icons might be needed if the Phase 5 friend-raid UI calls for them.
+Lower priority than Option A. Customer behavior IS visible — but it's also OK that Session 1 ships with one customer at a time; the architectural pattern is what Sessions 3+ extend.
 
-**Recommendation:** **Option A (Phase 4)**. Phase 3 just closed and the architecture is fresh in mind; Phase 4's tick loop reads and writes saves continuously, so building it on top of the Phase 3 foundation is the natural next step. The two Phase 1b stragglers and the cosmetic items can be picked up any time, none of them block gameplay.
+**Recommendation:** **Option A (Session 3)**. Session 2 just closed and the architecture is fresh; the order/kitchen flow is what makes the cafe come alive (customers actually do something when seated). Option B's `constants.bin.mid` could be folded into Session 3 if the cook-duration RE wants those fields; Option C is polish and can land any time.
 
 ---
 
@@ -120,7 +133,14 @@ Reads `tool/file_types/testdata/*.{caf,dat}`, writes PascalCase JSON to `godot/t
 "/c/Users/edwar/AppData/Local/Microsoft/WinGet/Packages/GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe/Godot_v4.6.2-stable_win64_console.exe" --headless --path godot/ --script res://validate_assets.gd
 ```
 
-Expected: 15/15 checks pass.
+Expected: 17/17 checks pass. Includes 16th `_validate_cafe_render` (cafe rendered from `playerCafe.caf`: 1925 floor + ≥23 cafe-objects) and 17th `_validate_customer_spawn` (customer spawn → walk → seated, all in headless via direct `tick()` calls).
+
+### Run the cafe + customer scene visually (GUI)
+```bash
+"/c/Users/edwar/AppData/Local/Microsoft/WinGet/Packages/GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe/Godot_v4.6.2-stable_win64.exe" godot/project.godot
+```
+
+Then F5 (or click Run). The full cafe should render iso-projected, centered in the viewport (`Camera2D` at `(-418, 1153)` zoom `0.25`). After ~1s a boxer-human head sprite spawns at the cafe's "north" tip and walks down-and-right to a chair over 3s; sits 2s; despawns; next customer 5s later.
 
 ### If adding new `class_name` scripts, rebuild Godot class cache first
 ```bash
@@ -152,16 +172,22 @@ done
 | `tool/dump_legacy_fixtures/` | Standalone Go CLI emitting Layer 2 JSON oracles for the GDScript test runner |
 | `tool/resource_manager/serialization/godot.go` | Godot asset build functions |
 | `tool/build_tool/main.go` | Entry point with `-target` flag dispatch (android/godot) |
-| `godot/project.godot` | Godot 4 project config |
-| `godot/scripts/sprite_atlas.gd` | `SpriteAtlas` class — atlas + offsets JSON loader |
-| `godot/scripts/main_scene.gd` | Main scene with `assemble()` + `pose_from_animation()` |
+| `godot/project.godot` | Godot 4 project config. Has `[autoload] GameState=...` (Phase 4 Session 2). |
+| `godot/main.tscn` | Main scene — Node2D root + Camera2D at iso center `(-418, 1153)` zoom `0.25`. `current=true` is critical (see Gotchas). |
+| `godot/scripts/sprite_atlas.gd` | `SpriteAtlas` class — atlas + offsets JSON loader. `get_character_pieces(name)` returns 27 pieces in a fixed order (see Gotchas for index→part-name map). |
+| `godot/scripts/main_scene.gd` | Main scene with `assemble(mode)` dispatch (`grid` legacy / `cafe` default). `_assemble_cafe` loads playerCafe.caf, instantiates `CafeRenderer`, wires `CustomerSystem`. `_process(delta)` drives `customer_system.tick(delta)`. |
+| `godot/scripts/cafe_renderer.gd` | **NEW (Phase 4 S1+1.5):** `CafeRenderer.render(parent, cafe_dict, atlases)`. Three passes (floor / walls / furniture); iso projection via `_iso_position(tx, ty)` returning `((tx-ty)*50, (tx+ty)*25)`. All passes use the existing `furniture` atlas. `mapTiles` exists in build but is unused for cafe interior — Phase 5 world map will use it. |
+| `godot/scripts/game_state.gd` | **NEW (Phase 4 S2):** `GameState` autoload. Holds `cafe_dict`, `occupied_seats`, signals `customer_spawned/seated/left`. Reachable as `GameState.foo` (runtime) or `/root/GameState` (path). |
+| `godot/scripts/systems/customer_actor.gd` | **NEW (Phase 4 S2):** `CustomerActor` Node2D. State machine WALKING/SEATED/LEAVING. Manual lerp via `tick(delta)`; no Godot Tween. Placeholder visual: boxer-human pieces[16] = `head1.png` at 2× scale. |
+| `godot/scripts/systems/customer_system.gd` | **NEW (Phase 4 S2):** `CustomerSystem` Node. Spawn timer + seat finder (`FurnitureType==3`) + active-customer tracker. SPAWN_POS is iso `(0, 0)` (north tip of cafe). Single concurrent customer; multi-customer is Session 2.5. |
 | `godot/scripts/save/binary_reader.gd`, `binary_writer.gd` | GDScript primitives mirroring Go's `binary_reader.go` / `binary_writer.go`. Note: `read_string` returns `PackedByteArray`, not `String` (see Gotchas) |
 | `godot/scripts/save/legacy_loader.gd`, `legacy_writer.gd` | GDScript port of the Go Cafe / SaveGame / FriendCafe parsers and writers |
 | `godot/scripts/save/save_v1.gd` | Going-forward JSON envelope. `save_save` / `load_save` + `_to_json_safe` / `_from_json_safe` walker |
 | `godot/test/test_save_round_trip.gd` | Phase 3 three-layer test runner. **207 PASS / 0 FAIL.** |
 | `godot/test/fixtures/save/` | Real device fixtures (`.caf`/`.dat`) plus committed JSON oracles for Layer 2 |
-| `godot/validate_assets.gd` | Headless asset validator, 15 checks |
+| `godot/validate_assets.gd` | Headless asset validator, **17 checks**: 15 from Phase 1-2, +16th cafe-render (Phase 4 S1), +17th customer-spawn (Phase 4 S2). |
 | `godot/assets/` | 5.5 MB sample assets for the validation script |
+| `godot/assets/atlases/mapTiles.{png,offsets.json}` | NEW in Phase 4 S1 — the world-map overview atlas (37 regions: city streets, cafe buildings). Currently unused at runtime; reserved for Phase 5. |
 | `build_godot/` | Gitignored. Full 18 MB Godot tree produced by `-target godot`. Regenerate with the build command above. |
 | `godot/.godot/` | Gitignored Godot class cache. Regenerate with `--editor --quit` if a `class_name` import fails. |
 | `.github/workflows/godot-validation.yml` | CI: Godot 4.6.2 download + class cache build + asset validator + save round-trip tests, all on every push |
@@ -169,6 +195,21 @@ done
 ---
 
 ## Gotchas
+
+### Phase 4 specific
+
+- **`Camera2D` must have `current = true` to activate.** A bare Camera2D in a tscn does NOT auto-activate in Godot 4 — the viewport stays at default `(0, 0)` and renders the upper-left of the world. Symptom: scene appears at upper-left corner instead of centered. Fix: add `current = true` to the tscn declaration. Verify via `Viewport.get_camera_2d()` returning non-null after the scene loads + processes one frame.
+- **Don't use `;` comments inside tscn `[node ...]` blocks.** They appear to parse but properties declared after the comment may be silently dropped. Keep comments in `.gd` source instead.
+- **`main_scene._ready` uses an `_assembled` bool, NOT child count.** Original Phase 2b `_ready` had `if get_child_count() == 0: assemble()` to prevent double-assembly when the validator pre-calls assemble before _ready fires. Phase 4 added a static Camera2D to main.tscn — child count is now 1, so the count-based guard skipped assemble entirely (blank scene). The fix: explicit `_assembled: bool` flag set by `assemble()`. If you add more static children to main.tscn, this still works.
+- **Iso projection: `screen_x = (tx-ty)*50`, `screen_y = (tx+ty)*25`** for Cafe.Tiles[i] at `(tx, ty) = (i % MapSizeX, i / MapSizeX)`. `TILE_W = 100`, `TILE_H = 50`. Cafe pixel bounds: `x ∈ [-2700, 1864]`, `y ∈ [0, 2305]` for the 35×55 fixture grid. Camera at `(-418, 1153)` zoom `0.25` fits the whole cafe in the default 1152×648 viewport. `CafeRenderer._iso_position` is the helper; `CustomerSystem._seat_world_position` mirrors the same math.
+- **`FurnitureType == 3` is a chair, NOT `== 2`.** The umbrella spec said `=2` but `tool/file_types/cafe.go:36` confirms `1=Stove, 2=ServingCounter`. Chairs are FurnitureType 3 (verified visually via `furniture/19.png` + 4 instances in playerCafe.caf fixture).
+- **Headless `--script` mode does NOT initialize project autoloads during `_init`.** Validator checks that touch autoloads (e.g. `_validate_customer_spawn`) must run inside `_initialize()` — see `validate_assets.gd` `_early_failures` accumulation pattern. Also: scripts that import `GameState` at parse time fail to compile in `--script` mode; access via `get_root().get_node_or_null("GameState")` or `load("res://scripts/...").new()` instead. The runtime path (GUI Godot) is unaffected; autoloads ARE at `/root/<Name>` when running normally.
+- **`mapTiles` atlas is the world-map overview, NOT cafe floor tiles.** Phase 4 Session 1's RE finding: the spec assumed `Cafe.Tiles[].U1` mapped via `mapTiles`. Visual inspection of `mapTiles/0.png` (810×1024 city street scene), `/1.png` (BACK button), `/2.png` (Enemy Cafe building) revealed it's the city overview atlas. Cafe interior tiles + walls + furniture all live in `furniture` atlas. Direct lookup `region = "%d.png" % U1`.
+- **`CafeFurniture.U2` is the atlas key, not `U1`.** `CafeWall.U1` IS the atlas key (e.g., 41, 87-93). But for furniture, U1 is something else (a unique id?) and U2 is the atlas region (e.g., 19 for a chair). See `cafe_renderer.gd._emit_furniture_object`.
+- **Boxer-human atlas piece order (for placeholder customer sprites):** `[0]=0-spacer, [1]=1x1, [2]=1x1_front, [3..7]=back_*, [8]=back_pelvis(spacer), [9..13]=back_arms/legs/torso, [14..15]=chairback(spacers), [16]=head1, [17..20]=front limbs, [21]=pelvis(spacer), [22..25]=front limbs, [26]=torso1`. Index 16 (head1.png, 93×90) is the largest visible piece. Indexes 0/8/14/15/21 are 3×3 spacers — invisible.
+- **GDScript lint warnings in console are not bugs.** Phase 4 Session 2 has 11 console warnings (unused signals, integer division, unused parameter `frame_index`). All are intentional false positives or signature-stability artifacts. Cleanup is a 5-minute pass with `@warning_ignore` annotations; deferred indefinitely as cosmetic.
+
+### Phase 3 specific
 
 - **`read_string` returns `PackedByteArray`, not `String`.** The legacy `globalData.dat` carries `\r\0` byte suffixes inside `CharacterInstance.Name` strings. Godot's `String` cannot hold a NUL codepoint, so byte-faithful round-trip requires keeping bytes rather than decoding through `String`. `write_string` accepts both `PackedByteArray` and `String` via `Variant`. The JSON envelope (`save_v1.gd`) walks Dictionary trees and serializes each `PackedByteArray` as either a plain JSON string (clean UTF-8, no NULs) or `{"_b64": "<base64>"}` (anything else). When adding new string-bearing parsers, follow this convention. See `binary_reader.gd:125-132`.
 - **Layer 2 cross-validation is lossy on string fields by design.** `_deep_equal` UTF-8-decodes the `PackedByteArray` side and compares to the JSON-parsed `String`. Layer 1 already proves byte-faithfulness; Layer 2's job is structural agreement. The diagnostic stderr "Unicode parsing error, some characters were replaced with � (U+FFFD)" during Layer 2 is expected — Godot's JSON parser substitutes embedded NULs with U+FFFD, and `_bytes_eq_string` compensates.
@@ -208,16 +249,23 @@ Memory files under `~/.claude/projects/<project-slug>/memory/` (auto memory loca
 
 ## Pointers for deeper reading
 
-- `docs/rewrite-plan.md` — the phased checklist (start here for scope questions). Phase 3 is now marked done; Phase 4 is the next active phase.
+**Phase 4 (in progress):**
+- `docs/superpowers/specs/2026-05-10-phase-4-game-tick-design.md` — Phase 4 umbrella design: 7-session breakdown, GameState autoload + signal bus pattern, sub-system map, RE strategy. Detailed Session 1 design.
+- `docs/superpowers/plans/2026-05-10-phase-4-session-1-cafe-rendering.md` — Session 1 implementation plan (executed). 14 tasks, hybrid empirical/Ghidra RE protocol for the U1 mapping (resolved via empirical inspection — mapTiles isn't the floor source).
+- `docs/superpowers/plans/2026-05-10-phase-4-session-2-customer-spawn.md` — Session 2 plan: `GameState` + `CustomerSystem` + `CustomerActor`. Reference template for Session 3.
+
+**Phase 3 (closed):**
 - `docs/devlog/2026-05-10-phase-3-save-format.md` — Phase 3 close-out: architecture decision, four-session arc, GDScript-specific surprises (`PackedByteArray` strings, `_b64` hybrid, `JSON.parse_string` floats), CI-as-done-signal.
 - `docs/superpowers/specs/2026-04-25-godot-save-format-bridge-design.md` — Phase 3 design: GDScript port choice + JSON envelope schema + 4-session sequencing.
 - `docs/superpowers/plans/2026-04-25-phase-3-session-1-cafe-round-trip.md` — Session 1 implementation plan (executed; useful as reference pattern for future session-scoped plans).
 - `docs/superpowers/plans/2026-04-25-phase-3-session-2-savegame-friendcafe.md` — Session 2 plan + the architectural deviation discovery for `read_string`.
 - `docs/superpowers/plans/2026-04-25-phase-3-session-3-oracle-envelope-ci.md` — Session 3 plan: oracle CLI, envelope walker, three-layer test integration, CI wiring.
+
+**Phase 0-2:**
 - `docs/devlog/2026-04-19-scudo-crash-hunt.md` — root cause of the Scudo crashes, GWP-ASan setup, runtime memory verification.
 - `docs/devlog/2026-04-12-megasession-wrap.md` — IAP bypass session + 14 commits across three phase boundaries.
 - `docs/devlog/2026-04-11-kickoff.md` — why Godot over the other rewrite paths.
-- `docs/devlog/2026-04-11-phase-2a-sprite-atlas.md` — most relevant for continuing Phase 2b.
+- `docs/devlog/2026-04-11-phase-2a-sprite-atlas.md` — most relevant for continuing Phase 2b (now closed via Phase 4 S1's cafe render).
 - `docs/superpowers/specs/2026-04-12-iap-debug-bypass-design.md` + `docs/superpowers/plans/2026-04-12-iap-debug-bypass.md` — IAP bypass design, Findings, and implementation plan. Only relevant if touching the legacy APK's billing path.
 
-Fifteen devlog entries total under `docs/devlog/` — read them chronologically for the full story, or jump to the latest two or three for context on the immediate next step.
+Fifteen devlog entries total under `docs/devlog/` — read them chronologically for the full story, or jump to the latest two or three for context on the immediate next step. Note: Phase 4 Sessions 1 + 1.5 + 2 don't yet have a devlog entry; that's deferred to Phase 4's close-out (Session 7), per the Phase 3 pattern.
