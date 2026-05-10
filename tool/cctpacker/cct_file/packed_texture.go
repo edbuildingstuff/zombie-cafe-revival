@@ -194,13 +194,10 @@ func WritePackedTexture(images []string, scale float32, sortByName bool, xOffset
 			continue
 		}
 
-		bound := src_img.Bounds().Size()
-
-		src, ok := src_img.(*image.NRGBA)
-
-		if !ok {
-			log.Fatal("Could not cast image to NRGBA")
-		}
+		// imaging.Clone converts any image.Image (e.g. *image.RGBA from an
+		// opaque/RGB PNG) to *image.NRGBA so the pixel loop below always works.
+		src := imaging.Clone(src_img)
+		bound := src.Bounds().Size()
 
 		for x := 0; x < bound.X; x++ {
 			for y := 0; y < bound.Y; y++ {

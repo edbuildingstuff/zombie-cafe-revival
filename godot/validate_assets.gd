@@ -32,6 +32,7 @@ func _init() -> void:
 	failures += _validate_character_atlas()
 	failures += _validate_texture_atlas()
 	failures += _validate_main_scene()
+	failures += _validate_cafe_render()
 
 	if failures.is_empty():
 		print("\n========== VALIDATION PASSED ==========")
@@ -282,7 +283,7 @@ func _validate_main_scene() -> Array:
 		instance.queue_free()
 		return [path + ": root node has no assemble() method"]
 
-	var built: int = instance.call("assemble")
+	var built: int = instance.call("assemble", "grid")
 	if built <= 0:
 		instance.queue_free()
 		return [path + ": assemble() built " + str(built) + " sprites"]
@@ -357,4 +358,70 @@ func _validate_main_scene() -> Array:
 		valid_textures, " with valid AtlasTextures, pose delta applied")
 
 	instance.queue_free()
+	return []
+
+func _validate_cafe_render() -> Array:
+	# Phase 4 Session 1: load playerCafe.caf via Phase 3 LegacyLoader,
+	# render to a Node2D via CafeRenderer, assert sprite counts and
+	# textures look right.
+	var cafe_path := "res://test/fixtures/save/playerCafe.caf"
+	if not FileAccess.file_exists(cafe_path):
+		return [cafe_path + ": fixture missing"]
+
+	var bytes: PackedByteArray = FileAccess.get_file_as_bytes(cafe_path)
+	if bytes.is_empty():
+		return [cafe_path + ": fixture is empty"]
+
+	var cafe_dict: Dictionary = LegacyLoader.parse_cafe_bytes(bytes)
+	if cafe_dict.is_empty():
+		return [cafe_path + ": LegacyLoader.parse_cafe_bytes returned empty Dict"]
+
+	var furn_atlas: SpriteAtlas = SpriteAtlas.load_from(
+		"res://assets/atlases/furniture.png",
+		"res://assets/atlases/furniture.offsets.json")
+	if furn_atlas == null:
+		return ["furniture atlas load failed"]
+
+	# Phase 4 Session 1 RE finding: cafe floor tiles, walls, AND furniture
+	# all share the existing furniture atlas. The mapTiles atlas is for
+	# Phase 5's world-map overview view, not cafe interior. So all three
+	# atlas keys point at furn_atlas.
+	var tiles_atlas: SpriteAtlas = furn_atlas
+	var walls_atlas: SpriteAtlas = furn_atlas
+
+	var node := Node2D.new()
+	var atlases := {
+		"tiles": tiles_atlas,
+		"walls": walls_atlas,
+		"furn": furn_atlas,
+	}
+	var count: int = CafeRenderer.render(node, cafe_dict, atlases)
+
+	# Hard floor: 1925 floor tiles (35x55 grid, one per Tiles[] entry).
+	var floor_count: int = 0
+	var object_count: int = 0
+	for child in node.get_children():
+		if not (child is Sprite2D):
+			node.queue_free()
+			return ["non-Sprite2D child found in CafeRenderer output: " + str(child)]
+		var sprite := child as Sprite2D
+		if sprite.z_index == CafeRenderer.Z_FLOOR:
+			floor_count += 1
+		else:
+			object_count += 1
+
+	node.queue_free()
+
+	if floor_count != 1925:
+		return ["expected 1925 floor sprites (35x55 grid), got " + str(floor_count)]
+
+	# The fixture has 23 non-trivial tiles. Each can carry up to 3 cafe
+	# objects (U5/U7/U9), so up to 69. Use >= 23 as a hard floor.
+	if object_count < 23:
+		return ["expected ≥23 cafe-object sprites, got " + str(object_count)]
+
+	if count != floor_count + object_count:
+		return ["CafeRenderer.render returned " + str(count) + " but children counted " + str(floor_count + object_count)]
+
+	print("  OK cafe render: ", floor_count, " floor + ", object_count, " objects = ", count, " total")
 	return []

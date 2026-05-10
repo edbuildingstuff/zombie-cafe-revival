@@ -69,6 +69,7 @@ func packGodotAtlases(in_directory string, out_directory string) {
 	PackGodotTextures(filepath.Join(imagesIn, "furniture"), out_directory, 1.0)
 	PackGodotTextures(filepath.Join(imagesIn, "furniture2"), out_directory, 0.75)
 	PackGodotTextures(filepath.Join(imagesIn, "furniture3"), out_directory, 1.0)
+	PackGodotTextures(filepath.Join(imagesIn, "mapTiles"), out_directory, 1.0)
 }
 
 // PackGodotCharacters mirrors serialization.PackCharacters but emits

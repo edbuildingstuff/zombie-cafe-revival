@@ -21,6 +21,17 @@ const OFFSETS_JSON := "res://assets/atlases/characterParts.offsets.json"
 const CHARACTER_ART_JSON := "res://assets/atlases/characterParts.characterArt.json"
 const CHARACTER_NAME := "boxer-human"
 
+const CAFE_FIXTURE_PATH := "res://test/fixtures/save/playerCafe.caf"
+const TILES_ATLAS_PNG := "res://assets/atlases/mapTiles.png"
+const TILES_ATLAS_OFFSETS := "res://assets/atlases/mapTiles.offsets.json"
+const FURN_ATLAS_PNG := "res://assets/atlases/furniture.png"
+const FURN_ATLAS_OFFSETS := "res://assets/atlases/furniture.offsets.json"
+# Walls share the existing furniture atlas — wall U1 keys (41, 87-93 in
+# playerCafe.caf) all resolve in furniture.offsets.json. See plan Task 3
+# finding. Reuse the furniture atlas paths for walls.
+const WALLS_ATLAS_PNG := FURN_ATLAS_PNG
+const WALLS_ATLAS_OFFSETS := FURN_ATLAS_OFFSETS
+
 const GRID_COLS := 9
 const CELL_W := 140.0
 const CELL_H := 140.0
@@ -31,22 +42,30 @@ func _ready() -> void:
 	# Guard against double-assembly when the validation test has
 	# already called assemble() before the node entered the tree.
 	if get_child_count() == 0:
-		assemble()
-	# Phase 1b: replace the grid with a single-keyframe pose.
-	# Grid layout stays as a graceful fallback when the JSON is
-	# missing or malformed — the push_warning is a signal to
-	# investigate but never crashes the scene.
-	var applied := pose_from_animation("res://assets/data/animation/sitSW.json", 0)
-	if applied == 0:
-		push_warning("main_scene: pose_from_animation returned 0, grid stays")
+		assemble("cafe")
+	# Phase 4 Session 1: the cafe path is the default. pose_from_animation
+	# is grid-mode behavior; the validator calls it directly when needed.
 
 
-## Builds the 27 Sprite2D children. Pulled out of _ready so the
-## headless validation can invoke it synchronously — nodes added
-## to the root window inside a `extends SceneTree` script's _init
-## only get their _ready callback on a later frame, which is too
-## late for the validation's same-frame child-count assertion.
-func assemble() -> int:
+## Builds scene content based on the given mode.
+## mode="grid": 27-sprite character grid (Phase 2b behavior, kept for validator).
+## mode="cafe": cafe rendering via CafeRenderer (Task 8 wires it fully).
+## Pulled out of _ready so the headless validation can invoke it synchronously —
+## nodes added to get_root() inside a `extends SceneTree` script's _init
+## only get their _ready callback on a later frame, which is too late for
+## the validation's same-frame child-count assertion.
+func assemble(mode: String = "cafe") -> int:
+	match mode:
+		"grid":
+			return _assemble_grid()
+		"cafe":
+			return _assemble_cafe()
+		_:
+			push_error("main_scene.assemble: unknown mode " + mode)
+			return 0
+
+
+func _assemble_grid() -> int:
 	var atlas := SpriteAtlas.load_from(ATLAS_PNG, OFFSETS_JSON, CHARACTER_ART_JSON)
 	if atlas == null:
 		push_error("main_scene: SpriteAtlas.load_from returned null")
@@ -79,6 +98,39 @@ func assemble() -> int:
 		piece_index += 1
 
 	return piece_index
+
+
+func _assemble_cafe() -> int:
+	if not FileAccess.file_exists(CAFE_FIXTURE_PATH):
+		push_error("main_scene: cafe fixture missing: " + CAFE_FIXTURE_PATH)
+		return 0
+
+	var bytes: PackedByteArray = FileAccess.get_file_as_bytes(CAFE_FIXTURE_PATH)
+	if bytes.is_empty():
+		push_error("main_scene: cafe fixture is empty")
+		return 0
+
+	var cafe_dict: Dictionary = LegacyLoader.parse_cafe_bytes(bytes)
+	if cafe_dict.is_empty():
+		push_error("main_scene: parse_cafe_bytes returned empty Dict")
+		return 0
+
+	var furn_atlas := SpriteAtlas.load_from(FURN_ATLAS_PNG, FURN_ATLAS_OFFSETS)
+	if furn_atlas == null:
+		push_error("main_scene: furn_atlas load failed")
+		return 0
+
+	# Phase 4 Session 1 RE finding: tiles + walls + furniture all share
+	# the existing furniture atlas. mapTiles is for Phase 5 (world map).
+	var tiles_atlas: SpriteAtlas = furn_atlas
+	var walls_atlas: SpriteAtlas = furn_atlas
+
+	var atlases := {
+		"tiles": tiles_atlas,
+		"walls": walls_atlas,
+		"furn": furn_atlas,
+	}
+	return CafeRenderer.render(self, cafe_dict, atlases)
 
 
 ## Replaces the grid layout with a single-keyframe pose pulled from an
