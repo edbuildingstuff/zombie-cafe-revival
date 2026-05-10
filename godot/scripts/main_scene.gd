@@ -38,12 +38,16 @@ const CELL_H := 140.0
 const GRID_ORIGIN := Vector2(80.0, 80.0)
 
 var _customer_system = null  # CustomerSystem instance; untyped to avoid compile dep on GameState
+var _assembled: bool = false  # set by assemble() to make it idempotent
 
 
 func _ready() -> void:
-	# Guard against double-assembly when the validation test has
-	# already called assemble() before the node entered the tree.
-	if get_child_count() == 0:
+	# Guard against double-assembly when the validation test has already
+	# called assemble() before the node entered the tree. The previous
+	# guard counted children, but Session 2 added a Camera2D to main.tscn
+	# (static child count = 1) so the count-based check broke. Use an
+	# explicit flag instead.
+	if not _assembled:
 		assemble("cafe")
 	# Phase 4 Session 1: the cafe path is the default. pose_from_animation
 	# is grid-mode behavior; the validator calls it directly when needed.
@@ -57,6 +61,7 @@ func _ready() -> void:
 ## only get their _ready callback on a later frame, which is too late for
 ## the validation's same-frame child-count assertion.
 func assemble(mode: String = "cafe") -> int:
+	_assembled = true
 	match mode:
 		"grid":
 			return _assemble_grid()

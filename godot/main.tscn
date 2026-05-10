@@ -8,7 +8,4 @@ script = ExtResource("1")
 [node name="MainCamera" type="Camera2D" parent="."]
 position = Vector2(875, 1375)
 zoom = Vector2(0.4, 0.4)
-; current=true forces this Camera2D to be the active one. Without this,
-; the Viewport's default (0,0) origin is used and the cafe appears in
-; the upper-left of the window instead of being centered.
 current = true
