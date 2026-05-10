@@ -19,9 +19,11 @@ const SPAWN_INTERVAL_SEC: float = 5.0
 const WALK_DURATION_SEC: float = 3.0
 
 # Spawn at the cafe's "north" tip in iso projection — tile (0, 0) maps to
-# screen origin, so a slight offset above puts the customer just outside
-# the cafe entrance, walking down-and-right to the seat.
-const SPAWN_POS: Vector2 = Vector2(0, -100)
+# screen origin (0, 0). With the Camera2D at (-418, 1153) zoom 0.25 the
+# default visible world y starts at -143; a 2x-scaled 90-px sprite centered
+# at y=0 fits comfortably (top edge at y=-90, leaving 53 px of headroom).
+# A previous attempt at (0, -100) cropped 47 px off the top of the sprite.
+const SPAWN_POS: Vector2 = Vector2(0, 0)
 
 # Iso tile dimensions — match CafeRenderer.TILE_W/H. Kept in sync via
 # _seat_world_position which mirrors CafeRenderer._iso_position.
