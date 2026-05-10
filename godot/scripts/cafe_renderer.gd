@@ -8,8 +8,22 @@ extends RefCounted
 ##   3. Furniture — one furniture sprite per Cafe.Tiles[*].U5/U7/U9 with Type=1
 ##
 ## All passes emit Sprite2D children with z_index set to enforce layering.
-## Coordinate system: TILE_W=TILE_H=50 hypothesis from Cafe Dict U2 deltas.
-## See docs/superpowers/specs/2026-05-10-phase-4-game-tick-design.md §3.3.
+##
+## Coordinate system: ISOMETRIC projection. Tile sprites are 164x105 diamond
+## sprites with the diamond drawn at ~100x50 stride within the bounding box.
+## Adjacent tiles must offset diagonally for the diamond edges to chain into
+## continuous lines (continuous pavement, continuous walls, etc.).
+##
+##   screen_x = (tx - ty) * (TILE_W / 2)
+##   screen_y = (tx + ty) * (TILE_H / 2)
+##
+## With TILE_W=100, TILE_H=50: tile (0,0) at (0,0); tile (1,0) at (50, 25);
+## tile (0,1) at (-50, 25); tile (1,1) at (0, 50). The cafe spans
+## (-2700..1864) × (0..2305) in pixels for a 35x55 grid.
+##
+## Phase 4 Session 1 used Cartesian (tx*50, ty*50) as a "best-effort coord fit"
+## per spec §3.3. Session 1.5 corrected this to proper iso projection so
+## diamond edges tessellate into continuous pavement/wall lines.
 ##
 ## Phase 4 Session 1 RE finding: cafe floor tiles, walls, AND furniture all
 ## share the existing `furniture` atlas — every observed U1 value (51, 68, 69,
@@ -19,8 +33,8 @@ extends RefCounted
 ## The mapTiles atlas is for Phase 5's world-map overview (city streets,
 ## enemy/friendly cafe buildings, UI buttons) — NOT for cafe interior rendering.
 
-const TILE_W: int = 50
-const TILE_H: int = 50
+const TILE_W: int = 100  # full diamond width (legacy iso projection stride)
+const TILE_H: int = 50   # full diamond height
 
 const Z_FLOOR: int = 0
 const Z_WALL: int = 10
@@ -66,13 +80,23 @@ static func _render_floor(parent: Node2D, cafe_dict: Dictionary, tiles_atlas) ->
 		sprite.name = "tile_%d" % i
 		sprite.texture = region
 		sprite.centered = false
-		sprite.position = Vector2(tx * TILE_W, ty * TILE_H)
+		sprite.position = _iso_position(tx, ty)
 		sprite.z_index = Z_FLOOR
 
 		parent.add_child(sprite)
 		count += 1
 
 	return count
+
+
+## Convert tile (tx, ty) to isometric screen position (top-left anchor).
+## See module docstring §"Coordinate system".
+static func _iso_position(tx: int, ty: int) -> Vector2:
+	@warning_ignore("integer_division")
+	var ix: int = (tx - ty) * (TILE_W / 2)
+	@warning_ignore("integer_division")
+	var iy: int = (tx + ty) * (TILE_H / 2)
+	return Vector2(ix, iy)
 
 
 static func _render_walls(parent: Node2D, cafe_dict: Dictionary, walls_atlas) -> int:
@@ -116,7 +140,7 @@ static func _render_walls(parent: Node2D, cafe_dict: Dictionary, walls_atlas) ->
 
 			var tx: int = i % map_size_x
 			var ty: int = i / map_size_x
-			sprite.position = Vector2(tx * TILE_W, ty * TILE_H)
+			sprite.position = _iso_position(tx, ty)
 
 			parent.add_child(sprite)
 			count += 1
@@ -194,7 +218,7 @@ static func _emit_furniture_object(
 
 	var tx: int = tile_idx % map_size_x
 	var ty: int = tile_idx / map_size_x
-	sprite.position = Vector2(tx * TILE_W, ty * TILE_H)
+	sprite.position = _iso_position(tx, ty)
 
 	parent.add_child(sprite)
 	return 1

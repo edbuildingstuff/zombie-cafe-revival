@@ -17,8 +17,15 @@ extends Node
 
 const SPAWN_INTERVAL_SEC: float = 5.0
 const WALK_DURATION_SEC: float = 3.0
-const SPAWN_POS: Vector2 = Vector2(50, 50)
-const TILE_W: int = 50
+
+# Spawn at the cafe's "north" tip in iso projection — tile (0, 0) maps to
+# screen origin, so a slight offset above puts the customer just outside
+# the cafe entrance, walking down-and-right to the seat.
+const SPAWN_POS: Vector2 = Vector2(0, -100)
+
+# Iso tile dimensions — match CafeRenderer.TILE_W/H. Kept in sync via
+# _seat_world_position which mirrors CafeRenderer._iso_position.
+const TILE_W: int = 100
 const TILE_H: int = 50
 
 const FURNITURE_TYPE_CHAIR: int = 3
@@ -102,12 +109,18 @@ func _find_free_seat() -> int:
 
 
 func _seat_world_position(tile_idx: int) -> Vector2:
+	# Iso projection — mirror of CafeRenderer._iso_position. Customer walks
+	# to the same screen pixel that the chair sprite is rendered at.
 	var map_size_x: int = int(GameState.cafe_dict.get("MapSizeX", 0))
 	if map_size_x <= 0:
 		return Vector2.ZERO
 	var tx: int = tile_idx % map_size_x
 	var ty: int = tile_idx / map_size_x
-	return Vector2(tx * TILE_W, ty * TILE_H)
+	@warning_ignore("integer_division")
+	var ix: int = (tx - ty) * (TILE_W / 2)
+	@warning_ignore("integer_division")
+	var iy: int = (tx + ty) * (TILE_H / 2)
+	return Vector2(ix, iy)
 
 
 # Test helper (controller / validator can read these for assertions).
