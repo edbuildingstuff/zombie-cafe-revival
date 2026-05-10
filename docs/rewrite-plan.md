@@ -140,7 +140,7 @@ Pending:
 - *(pending, future)* Cafe background. Blocked on the `mapTiles` texture packer being enabled (currently commented out in the legacy `build_tool/main.go`).
 - *(done)* Real skeletal posing for `boxer-human`. `main_scene.gd` gained a `pose_from_animation(json_path, frame_index)` method that loads `godot/assets/data/animation/sitSW.json`, pulls the 13-record skeleton section, and writes bone-derived `Sprite2D` positions on top of the Phase 2b grid. The grid layout stays as a graceful fallback when the JSON is missing or malformed (no scene crash). The pose uses the translation component of each 3×4 transform (indices 9, 10 of the 12-float block) anchored at screen-center (640, 360). `validate_assets.gd`'s `_validate_main_scene` check gained a pose delta assertion that confirms at least one sprite position differs from its grid cell origin after posing runs — end-to-end headless verification that the Go parser → JSON → Godot consumer pipeline works. Does NOT yet render a biologically faithful sit pose because the skeleton-section translations are all zero in the bind pose; real per-keyframe data lives in the opaque Tail section that's deferred. See `docs/devlog/2026-04-11-phase-1b-animation-parser.md` for details.
 
-### Phase 3 — Save-load round-trip *(in progress)*
+### Phase 3 — Save-load round-trip *(done, 2026-05-10)*
 
 **Done when:** the Godot client can load a real save file produced by the legacy Android build, render the cafe layout described by it, and write it back out byte-identically. No tick simulation yet — this is purely a data path.
 
@@ -172,10 +172,11 @@ Landed (Session 3 of 4 per `docs/superpowers/specs/2026-04-25-godot-save-format-
 - *(done)* `.github/workflows/godot-validation.yml` extended with a "Run save round-trip tests" step that runs `test_save_round_trip.gd` after the existing asset validator. First green CI run on `main` is the Phase 3 spec's done signal.
 - *(done)* Final test runner count: **207 PASS / 0 FAIL**.
 
-Deliverables:
-- A GDScript/C# wrapper that calls into the Go `file_types` package (via a compiled shared library, or by round-tripping through JSON).
-- A test save file checked in under `godot/test/fixtures/`.
-- A unit test in Godot that loads it, re-saves it, and diffs against the original bytes.
+Landed (Session 4 of 4, 2026-05-10):
+
+- *(done)* `docs/devlog/2026-05-10-phase-3-save-format.md` — Phase 3 close-out devlog covering the architecture decision (option 3: GDScript port, over GDExtension and asset-import subprocess, because cross-platform reach makes options 1 and 2 untenable), the four-session arc, the per-format surprises (`SaveStrings` count-1 quirk, `Trailing []byte` preservation, the load-bearing `read_string returns PackedByteArray` deviation, the `{"_b64": ...}` hybrid in the JSON envelope), and the test-pyramid + CI-as-done-signal.
+- *(done)* `docs/handoff.md` regenerated to reflect Phase 3 closed and Phase 4 (game tick) as the recommended next phase.
+- *(done)* This entry plus the line-1 status flip from `*(in progress)*` to `*(done, 2026-05-10)*`.
 
 ### Phase 4 — Game tick loop
 
@@ -248,10 +249,10 @@ The trade-off we're accepting: we give up bit-perfect behavioral fidelity with t
 
 - **Save format v63 is not the only version.** There may be older save formats in the wild. Phase 3 needs to decide whether to support them or require a one-way upgrade.
 - **The animation format is decoded but not re-packed.** We'll need to finish that work in Phase 1 or Phase 4, depending on whether Godot consumes the original atlases or a re-exported form.
-- **Go ↔ Godot integration path is undecided.** Three candidates: (a) compile `file_types` to a shared library via `c-shared` buildmode and call it from GDExtension; (b) run the Go tooling as a subprocess during asset import only, and never at runtime; (c) port `file_types` to GDScript/C# and accept the maintenance duplication. Option (b) is the leading candidate because it keeps runtime and tooling concerns cleanly separated.
+- **Go ↔ Godot integration path** *(resolved 2026-05-10 — Phase 3)*. Settled in favor of option (c): port `file_types` save parsers to GDScript and accept the maintenance duplication. Cross-platform reach (web, iOS) made options (a) and (b) untenable — GDExtension on web is wobbly in Godot 4 and the per-platform `.so`/`.dll`/`.dylib`/`.wasm` matrix is fragile relative to the payload size; a subprocess is impossible on web (no subprocesses in the browser sandbox) and effectively impossible on iOS (no `fork+exec` in the standard sandbox). The duplicate-maintenance cost is bounded — the formats have been stable since 2011. See `docs/superpowers/specs/2026-04-25-godot-save-format-bridge-design.md` and `docs/devlog/2026-05-10-phase-3-save-format.md`.
 - **Legal posture.** The project has always operated in the reverse engineering preservation grey zone. A Godot rewrite doesn't change that, but it's worth re-reading the position stated in the README before any public release.
 - **Japanese version support.** Phase 4 should decide early whether to target EN-only, JP-only, or both. Both is cheap if the rewrite is designed for it from the start, expensive if bolted on later.
 
 ## Decision log pointer
 
-This document *is* the decision log for the Godot rewrite. Future major decisions (e.g., GDScript vs. C#, the Go ↔ Godot integration path, save format migration strategy) will be captured here as amendments with dates, not in separate files. Small decisions and exploration notes go in `docs/devlog/` instead.
+This document *is* the decision log for the Godot rewrite. Past major decisions captured inline here: the Godot path (Phase 0 kickoff), and the GDScript-port over GDExtension/subprocess for Go ↔ Godot integration (resolved 2026-05-10, Phase 3). Future major decisions (e.g., GDScript vs. C# for tick-hot paths, save format migration strategy when v2 is forced, JP/EN scope) will be captured here as amendments with dates, not in separate files. Small decisions and exploration notes go in `docs/devlog/` instead.

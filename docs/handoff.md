@@ -1,28 +1,32 @@
 # Session Handoff — Zombie Cafe Revival
 
-**Last updated:** 2026-04-25 (after Phase 3 Session 1; previous: 2026-04-19 Scudo crash hunt, 2026-04-12 IAP bypass)
-**Purpose:** quick orientation for a fresh session. Self-contained; read this plus `docs/superpowers/specs/2026-04-25-godot-save-format-bridge-design.md`, `docs/superpowers/plans/2026-04-25-phase-3-session-1-cafe-round-trip.md`, and `docs/rewrite-plan.md` and you should be able to continue without re-reading the full devlog history.
+**Last updated:** 2026-05-10 (after Phase 3 close-out; previous: 2026-04-25 Phase 3 Session 1, 2026-04-19 Scudo crash hunt, 2026-04-12 IAP bypass)
+**Purpose:** quick orientation for a fresh session. Self-contained; read this plus `docs/devlog/2026-05-10-phase-3-save-format.md` and `docs/rewrite-plan.md` and you should be able to continue without re-reading the full devlog history.
 
 ---
 
 ## The project in one paragraph
 
-**Zombie Cafe Revival** is a reverse engineering + rewrite project for Capcom's 2011 mobile game *Zombie Cafe*. Edward Yang ([@edbuildingstuff](https://github.com/edbuildingstuff)) is continuing from Airyz's original Android APK patching work (see `README.md`) by rewriting the client as a **Godot 4 game** that reuses the existing Go asset pipeline and the Cloudflare Workers backend. The Go tooling decodes/encodes every binary format the game uses; the Godot client will render and simulate on top of that. Goal is cross-platform (Windows/Mac/Linux/Android/iOS/web) via Godot's export targets. The original ARMv7 `libZombieCafeAndroid.so` is used only as reference documentation, not as runtime code.
+**Zombie Cafe Revival** is a reverse engineering + rewrite project for Capcom's 2011 mobile game *Zombie Cafe*. Edward Yang ([@edbuildingstuff](https://github.com/edbuildingstuff)) is continuing from Airyz's original Android APK patching work (see `README.md`) by rewriting the client as a **Godot 4 game** that reuses the existing Go asset pipeline and the Cloudflare Workers backend. The Go tooling decodes/encodes every binary format the game uses; the Godot client renders and simulates on top of that. Goal is cross-platform (Windows/Mac/Linux/Android/iOS/web) via Godot's export targets. The original ARMv7 `libZombieCafeAndroid.so` is used only as reference documentation, not as runtime code.
 
 ---
 
 ## Where we are
 
-Eleven devlog entries from 2026-04-11 plus one megasession entry from 2026-04-12 (`docs/devlog/2026-04-12-megasession-wrap.md`) capturing 14 commits across three phase boundaries, one devlog entry from 2026-04-19 covering the Scudo crash hunt, and now Phase 3 Session 1 (2026-04-25) which landed the GDScript foundation for the save format bridge. Tracked in `docs/rewrite-plan.md` with checklist substeps. Short summary:
+**Phase 3 is closed.** The Godot client owns the save format end-to-end — five real device fixtures across three formats round-trip byte-identically through pure GDScript, a JSON envelope at `user://save.json` is the going-forward save format, and CI runs the test runner on every push (**207 PASS / 0 FAIL**). The longest-standing open question in the rewrite plan ("Go ↔ Godot integration path is undecided") is settled in favor of **option 3: GDScript port** — over GDExtension's per-platform native matrix or a subprocess at asset-import time only — because cross-platform reach (web, iOS) makes options 1 and 2 untenable. See `docs/devlog/2026-05-10-phase-3-save-format.md` for the full story.
+
+**Phase status by phase:**
 
 - **Phase 0a (done):** file_types validation harness. Round-trip tests for every format passing.
 - **Phase 0b (done, including real fixtures):** lossless parsers and symmetric writers for every binary format. Real device fixtures live under `tool/file_types/testdata/` — `playerCafe.caf` + `BACKUP1.caf` (Cafe), `globalData.dat` + `BACKUP1.dat` (SaveGame, with `Trailing []byte` preservation field), `ServerData.dat` (FriendCafe). All round-trip byte-identically.
 - **Phase 1a (done):** `-target godot` flag on `build_tool`.
-- **Phase 1b (almost fully done):** atlas packing, animation parser, six opaque binary parsers, debug print sweep, atlas-only output (66% size reduction). Pending: `constants.bin.mid` (mixed endian), `font3.bin.mid` (custom bitmap format). Bitmap font conversion (item 4) and social icon copy (item 7) also pending but low-priority.
+- **Phase 1b (almost fully done):** atlas packing, animation parser, six opaque binary parsers, debug print sweep, atlas-only output (66% size reduction). Pending: `constants.bin.mid` (mixed endian), `font3.bin.mid` (custom bitmap format). Bitmap font conversion (item 4) and social icon copy (item 7) also pending but low-priority cosmetic.
 - **Phase 1 validation (done):** 15/15 validation checks passing via `godot/validate_assets.gd` + GitHub Actions CI.
 - **Phase 2a (done):** `SpriteAtlas` with O(1) per-character piece lookup.
-- **Phase 2b (done):** `godot/main.tscn` + `main_scene.gd` + the pose function reading `sitSW.json`. Open `godot/project.godot` in Godot 4 → Run → shows boxer-human posed. Cafe background still pending (blocked on mapTiles packer re-enablement).
-- **Phase 3 (Session 1 of 4 done, 2026-04-25):** Pure GDScript port of the Go `Cafe` family. `godot/scripts/save/{binary_reader,binary_writer,legacy_loader,legacy_writer}.gd` plus `godot/test/test_save_round_trip.gd`. Real fixtures `playerCafe.caf` (20,129 B) and `BACKUP1.caf` (20,017 B) round-trip byte-identically. 87 PASS / 0 FAIL on the headless test runner. Commit: `d02a00de`. The integration-path question that had been open since 2026-04-11 is closed: GDScript port (option 3 from `rewrite-plan.md`) over GDExtension or runtime subprocess, because cross-platform reach (web/iOS) makes options 1 and 2 untenable. **Sessions 2-4 remain:** SaveGame + FriendCafe round-trip (Session 2), cross-validation oracle + JSON envelope + CI wiring (Session 3), devlog/handoff close-out (Session 4). See spec/plan for details. Plans for Sessions 2-4 will be written when this session lands.
+- **Phase 2b (done):** `godot/main.tscn` + `main_scene.gd` + the pose function reading `sitSW.json`. Open `godot/project.godot` in Godot 4 → Run → shows boxer-human posed. Cafe background still pending (blocked on `mapTiles` packer re-enablement).
+- **Phase 3 (done, 2026-04-25 → 2026-05-10):** Pure GDScript port of the Go save-family parsers and writers. `godot/scripts/save/{binary_reader,binary_writer,legacy_loader,legacy_writer,save_v1}.gd` plus `godot/test/test_save_round_trip.gd` plus `tool/dump_legacy_fixtures/`. Three test layers green: Layer 1 byte-identical round-trip on all 5 real fixtures, Layer 2 Go-Dict ↔ GDScript-Dict cross-validation against committed JSON oracles, Layer 3 envelope round-trip. CI runs the test runner on every push. **207 PASS / 0 FAIL.** Sessions: 1 (`d02a00de`, primitives + Cafe), 2 (`0b059166`, SaveGame + FriendCafe), 3 (`c3f90174`, oracle + envelope + CI), 4 (this handoff + devlog).
+- **Phase 4 (next):** game tick loop. Customers spawn, walk to tables, order food, wait for the stove, eat, pay, and leave. XP and money update.
+- **Phase 5 (unblocked):** online features. Server upload of binary saves now plumbable against the GDScript writer (`write_save_game(dict) -> PackedByteArray`).
 
 **Legacy APK on hardware is stable.** The 2026-04-19 session tracked down the `Scudo: corrupted chunk header` crashes that had been firing every few minutes. Root cause: two sibling off-by-one bugs in the game's JNI MD5 wrappers (`javaMD5String+102` and `javaMD5Data+126`), both writing `\0` one byte past their `new char[32]` allocation. Fix is a 1-byte patch at each site flipping `movs r3, #0x20` → `movs r3, #0x1F` so the terminator lands at `buf[31]` in-bounds. A separate Bug 1 (`SoundManager.playSound → MediaPlayer.release → RefBase::decStrong → scudo_free` on every character SFX) was initially worked around by NOPing `javaStartEffect+50`, but with the source corruption from javaMD5 fixed the SFX path was provably clean — the NOP was reverted in `2ebcfc35` to restore character SFX. See `docs/devlog/2026-04-19-scudo-crash-hunt.md` for the diagnostic trail. Validated stable on a Samsung Note 20 Ultra (Android 13) for multi-minute raid sessions.
 
@@ -30,29 +34,28 @@ Eleven devlog entries from 2026-04-11 plus one megasession entry from 2026-04-12
 
 **Facebook invite-friends rebrand (`f23cef1a`)** points the dialog at `https://github.com/edbuildingstuff` and adds a back-button-dismissable WebView fix (was unkillable due to a threading bug in the original FB SDK).
 
-**Nothing is broken.** Full workspace builds clean (`file_types`, `resource_manager`, `build_tool`, `cctpacker` native; `server` under `GOOS=js GOARCH=wasm`). All Go tests green. Headless Godot validation passes 15/15. Phase 3 Session 1 test runner passes 87/0.
+**Nothing is broken.** Full workspace builds clean (`file_types`, `resource_manager`, `build_tool`, `cctpacker`, `dump_legacy_fixtures` native; `server` under `GOOS=js GOARCH=wasm`). All Go tests green. Headless Godot validation passes 15/15. Phase 3 save round-trip runner passes 207/0.
 
 ---
 
 ## What to do next
 
-### Option A — Phase 3 Session 2: SaveGame + FriendCafe round-trip *(recommended)*
+### Option A — Phase 4: game tick loop *(recommended)*
 
-Direct continuation of Session 1. Extends `legacy_loader.gd` / `legacy_writer.gd` with:
+Phase 3 closed the save-load fidelity contract; Phase 4 is now the next active phase. Customers spawn, walk to tables, order food, wait for the stove, eat, pay, and leave. XP and money update. The player can place furniture and buy characters. No online features, no billing, no Facebook.
 
-- `parse_save_game` / `write_save_game` — the trickier of the two formats because of the `SaveStrings` count-1 quirk (`RawCount=0` and `RawCount=1` both decode to zero strings; `RawCount` must be preserved separately) and the ~1 KB `Trailing []byte` preservation field that becomes `Trailing_b64` in the Dictionary.
-- `parse_friend_cafe` / `write_friend_cafe` — mostly orchestration on top of Session 1's `parse_cafe`. Three lines of plumbing: leading byte version + CafeState + Cafe.
-- Sub-records: `parse_character_instance`, `parse_cafe_state`, `parse_save_strings`.
+This is where the bulk of the reverse engineering effort goes. For each behavior, the order of operations is:
 
-Three more fixtures to copy into `godot/test/fixtures/save/`: `globalData.dat`, `BACKUP1.dat`, `ServerData.dat`.
+1. Check the original `libZombieCafeAndroid.so` in Ghidra, using the offsets already labelled in `src/lib/cpp/ZombieCafeExtension.cpp` as anchors.
+2. Write a devlog entry describing the behavior in plain English.
+3. Implement it in Godot.
+4. If the behavior is exposed in a save file field (e.g., a timer, a cooldown), verify by loading a legacy save and confirming the values match expectations.
 
-Acceptance: `OK 5/5` on real device fixtures (all five round-trip byte-identically in pure GDScript). The test runner already exists; just extend `_init` with three more `_test_*_fixture` calls.
-
-**First step:** write the Session 2 plan at `docs/superpowers/plans/2026-04-25-phase-3-session-2-savegame-friendcafe.md` following the same pattern as Session 1's plan. Then execute via subagent-driven-development. Estimate: ~8-10 implementer tasks (about half the size of Session 1 because primitives + cafe sub-records are already done).
+**First step:** write a Phase 4 design spec at `docs/superpowers/specs/2026-05-XX-phase-4-game-tick-design.md` covering the sub-system breakdown (customer spawning, pathfinding, food orders, kitchen state, payment/XP, furniture placement, character purchasing) and the per-sub-system reverse engineering anchor points. Then break Phase 4 into sessions like Phase 3 was — each session a vertical slice (e.g., "customer spawn + walk to seat" as Session 1).
 
 ### Option B — Phase 1b stragglers: `constants.bin.mid` or `font3.bin.mid`
 
-Both deferred during the megasession because their formats resist quick analysis. Each would be its own focused session.
+Both deferred during the Phase 1b megasession because their formats resist quick analysis. Each would be its own focused session.
 
 - **`constants.bin.mid`** (9789 bytes): mixed-endian, first 12 bytes look like BE int32s (`1000, 10000, 3000`), subsequent floats only decode under LE. Differential analysis across similar files OR a Ghidra pass would help.
 - **`font3.bin.mid`** (2533 bytes): custom bitmap font format — NOT standard BMFont. Would need its own RE investigation.
@@ -63,7 +66,7 @@ Medium-value. Closes the Phase 1b item 3 list entirely.
 
 Lower-value cosmetic items deferred from Phase 1b. `A Love of Thunder.ttf` already rasterizes via Godot's built-in TTF renderer, so the bitmap font work only matters if the original look needs preserving. Social icons might be needed if the Phase 5 friend-raid UI calls for them.
 
-**Recommendation:** **Option A (Phase 3 Session 2)**. Session 1 just landed and the architecture is fresh in mind; Sessions 2-4 build sequentially on it and were estimated at decreasing size. The sooner Phase 3 closes, the sooner Phase 4 (game tick) is unblocked.
+**Recommendation:** **Option A (Phase 4)**. Phase 3 just closed and the architecture is fresh in mind; Phase 4's tick loop reads and writes saves continuously, so building it on top of the Phase 3 foundation is the natural next step. The two Phase 1b stragglers and the cosmetic items can be picked up any time, none of them block gameplay.
 
 ---
 
@@ -82,7 +85,7 @@ Neither Go, Godot, nor `adb` is on `PATH` in Git Bash. Always invoke via full pa
 
 **Multi-device note:** Edward works on this project across at least two computers. The paths above are canonical — if a tool is missing on a machine, install it at the matching path (e.g. `winget install -e --id GodotEngine.GodotEngine` brings Godot to the WinGet location above) rather than localizing to a divergent path. See `memory/project_multi_device.md`.
 
-Git user: **Edward Yang**. Main branch: **main**. Repo root: `/c/Users/edwar/Documents/edbuildingstuff/zombie-cafe-revival` (path may vary by device — different from the 2026-04-19 doc's `/c/Users/edwar/edbuildingstuff/...`; both are valid on their respective machines).
+Git user: **Edward Yang**. Main branch: **main**. Repo root: `/c/Users/edwar/edbuildingstuff/zombie-cafe-revival` on the current authoring device (path may vary by device — different from the 2026-04-19 doc's `/c/Users/edwar/Documents/edbuildingstuff/...`; both are valid on their respective machines).
 
 ---
 
@@ -103,7 +106,14 @@ Git user: **Edward Yang**. Main branch: **main**. Repo root: `/c/Users/edwar/Doc
 "/c/Users/edwar/AppData/Local/Microsoft/WinGet/Packages/GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe/Godot_v4.6.2-stable_win64_console.exe" --headless --path godot/ --script res://test/test_save_round_trip.gd
 ```
 
-Expected (post-Session-1): `=== Session 1 results: 87 passed, 0 failed ===`, exit 0.
+Expected: `=== Save round-trip results: 207 passed, 0 failed ===`, exit 0.
+
+### Regenerate Layer 2 JSON oracles after Go parser changes
+```bash
+"/c/Program Files/Go/bin/go.exe" run ./tool/dump_legacy_fixtures
+```
+
+Reads `tool/file_types/testdata/*.{caf,dat}`, writes PascalCase JSON to `godot/test/fixtures/save/<name>.json` for the 5 real fixtures. Re-run the GDScript test runner afterwards to confirm Layer 2 still passes.
 
 ### Run Godot headless asset validation
 ```bash
@@ -119,7 +129,7 @@ Expected: 15/15 checks pass.
 
 ### Build every workspace module
 ```bash
-for m in file_types build_tool resource_manager cctpacker; do
+for m in file_types build_tool resource_manager cctpacker dump_legacy_fixtures; do
   (cd tool/$m && "/c/Program Files/Go/bin/go.exe" build ./...) || echo "$m FAILED"
 done
 (cd tool/server && GOOS=js GOARCH=wasm "/c/Program Files/Go/bin/go.exe" build ./...) || echo "server FAILED"
@@ -133,38 +143,44 @@ done
 |---|---|
 | `README.md` | Project overview, heritage, legacy APK build instructions |
 | `docs/rewrite-plan.md` | Phased implementation plan, source of truth for done/pending substeps |
-| `docs/devlog/` | 14 narrative entries spanning Phase 0a through 2026-04-19 Scudo hunt |
+| `docs/devlog/` | Narrative entries spanning Phase 0a through Phase 3 close-out (2026-05-10) |
 | `docs/superpowers/specs/` | Design specs — `2026-04-12-iap-debug-bypass-design.md`, `2026-04-11-animation-keyframe-parser-design.md`, `2026-04-25-godot-save-format-bridge-design.md` |
-| `docs/superpowers/plans/` | Implementation plans — `2026-04-12-iap-debug-bypass.md`, `2026-04-11-animation-keyframe-parser.md`, `2026-04-25-phase-3-session-1-cafe-round-trip.md` |
+| `docs/superpowers/plans/` | Implementation plans — IAP bypass, animation keyframe parser, Phase 3 Sessions 1/2/3 |
 | `tool/file_types/` | Go binary format parsers and writers. Every format has round-trip tests. |
 | `tool/file_types/testdata/` | Real device fixtures pulled from the legacy APK |
 | `tool/file_types/roundtrip_test.go` | Go round-trip tests, ~1306 lines |
+| `tool/dump_legacy_fixtures/` | Standalone Go CLI emitting Layer 2 JSON oracles for the GDScript test runner |
 | `tool/resource_manager/serialization/godot.go` | Godot asset build functions |
 | `tool/build_tool/main.go` | Entry point with `-target` flag dispatch (android/godot) |
 | `godot/project.godot` | Godot 4 project config |
 | `godot/scripts/sprite_atlas.gd` | `SpriteAtlas` class — atlas + offsets JSON loader |
 | `godot/scripts/main_scene.gd` | Main scene with `assemble()` + `pose_from_animation()` |
-| `godot/scripts/save/binary_reader.gd`, `binary_writer.gd` | **NEW (Session 1):** GDScript primitives mirroring Go's binary_reader.go / binary_writer.go |
-| `godot/scripts/save/legacy_loader.gd`, `legacy_writer.gd` | **NEW (Session 1):** GDScript port of the Go Cafe-family parsers/writers |
-| `godot/test/test_save_round_trip.gd` | **NEW (Session 1):** Phase 3 Layer-1 round-trip test runner. 87 PASS / 0 FAIL. |
-| `godot/test/fixtures/save/` | **NEW (Session 1):** Cafe fixtures `playerCafe.caf` + `BACKUP1.caf`, copied from `tool/file_types/testdata/`. Sessions 2 will add `globalData.dat`, `BACKUP1.dat`, `ServerData.dat`. |
+| `godot/scripts/save/binary_reader.gd`, `binary_writer.gd` | GDScript primitives mirroring Go's `binary_reader.go` / `binary_writer.go`. Note: `read_string` returns `PackedByteArray`, not `String` (see Gotchas) |
+| `godot/scripts/save/legacy_loader.gd`, `legacy_writer.gd` | GDScript port of the Go Cafe / SaveGame / FriendCafe parsers and writers |
+| `godot/scripts/save/save_v1.gd` | Going-forward JSON envelope. `save_save` / `load_save` + `_to_json_safe` / `_from_json_safe` walker |
+| `godot/test/test_save_round_trip.gd` | Phase 3 three-layer test runner. **207 PASS / 0 FAIL.** |
+| `godot/test/fixtures/save/` | Real device fixtures (`.caf`/`.dat`) plus committed JSON oracles for Layer 2 |
 | `godot/validate_assets.gd` | Headless asset validator, 15 checks |
 | `godot/assets/` | 5.5 MB sample assets for the validation script |
 | `build_godot/` | Gitignored. Full 18 MB Godot tree produced by `-target godot`. Regenerate with the build command above. |
 | `godot/.godot/` | Gitignored Godot class cache. Regenerate with `--editor --quit` if a `class_name` import fails. |
+| `.github/workflows/godot-validation.yml` | CI: Godot 4.6.2 download + class cache build + asset validator + save round-trip tests, all on every push |
 
 ---
 
 ## Gotchas
 
+- **`read_string` returns `PackedByteArray`, not `String`.** The legacy `globalData.dat` carries `\r\0` byte suffixes inside `CharacterInstance.Name` strings. Godot's `String` cannot hold a NUL codepoint, so byte-faithful round-trip requires keeping bytes rather than decoding through `String`. `write_string` accepts both `PackedByteArray` and `String` via `Variant`. The JSON envelope (`save_v1.gd`) walks Dictionary trees and serializes each `PackedByteArray` as either a plain JSON string (clean UTF-8, no NULs) or `{"_b64": "<base64>"}` (anything else). When adding new string-bearing parsers, follow this convention. See `binary_reader.gd:125-132`.
+- **Layer 2 cross-validation is lossy on string fields by design.** `_deep_equal` UTF-8-decodes the `PackedByteArray` side and compares to the JSON-parsed `String`. Layer 1 already proves byte-faithfulness; Layer 2's job is structural agreement. The diagnostic stderr "Unicode parsing error, some characters were replaced with � (U+FFFD)" during Layer 2 is expected — Godot's JSON parser substitutes embedded NULs with U+FFFD, and `_bytes_eq_string` compensates.
+- **`JSON.parse_string` returns `float` for every number.** The `_deep_equal` helper coerces both sides to float-with-tolerance. Tolerance is both absolute and relative (`max(1e-6, max(abs(a), abs(b)) * 1e-6)`) because Go's `json.Marshal` of float32 emits the shortest decimal representation; reconstructed float64 differs from the original float32 by up to half a ULP at float32 precision (~1e-7 relative).
+- **Migration dispatcher is scaffold-only at v1.** `CURRENT_VERSION = 1`. The negative-path tests cover v2 rejection (forward-only), missing-version rejection, missing-file rejection, non-object root rejection. Real migration files (`migrations/v1_to_v2.gd`) land when a real format change requires one — Phase 4+.
 - **Godot CLI `--path` is sticky.** After `--path godot/`, any `--script` argument is resolved via `res://` from that project root. Always use `res://<path>`, never a system path.
 - **`class_name` registry is lazy.** New scripts with `class_name` directives are invisible to other scripts until a project filesystem scan has run. After adding a new `class_name`, run `godot --headless --editor --quit --path godot/` once. Symptom: `Identifier "FooClass" not declared`.
 - **Use the `_console` Godot variant for headless runs.** The plain `.exe` spawns a separate Windows console window that's hard to capture; the `_console` variant writes to stdout in-process.
-- **GDScript has no exceptions** — no try/catch. The `BinaryReader` in `godot/scripts/save/binary_reader.gd` uses a `failed: bool` flag pattern: short reads call `push_error` and set `failed = true`; subsequent reads short-circuit. Top-level callers check `reader.failed` after parsing. New primitive readers should follow the same pattern.
-- **GDScript `JSON.parse_string` returns floats for all numbers.** Layer 1 doesn't go through JSON, but Sessions 2-3 cross-validation will — `legacy_writer.gd` already casts every numeric field via `int(...)` so it tolerates JSON-sourced floats.
+- **GDScript has no exceptions** — no try/catch. The `BinaryReader` in `godot/scripts/save/binary_reader.gd` uses a `failed: bool` flag pattern: short reads call `push_error` and set `failed = true`; subsequent reads short-circuit. Top-level callers check `reader.failed` after parsing.
 - **GDScript only allows one `class_name` per file.** `binary_reader.gd` and `binary_writer.gd` were intentionally split for this reason. New parser/writer modules should follow.
-- **`PackedByteArray.encode_float`/`decode_float` are little-endian** in Godot 4 — matches the Go save format's float encoding. No translation needed.
-- **`.uid` files for `class_name` scripts are tracked.** Convention from existing `main_scene.gd.uid`, `sprite_atlas.gd.uid`, `validate_assets.gd.uid`. When adding a new `class_name`, commit the auto-generated `.uid` sidecar alongside.
+- **`PackedByteArray.encode_float` / `decode_float` are little-endian** in Godot 4 — matches the Go save format's float encoding. No translation needed.
+- **`.uid` files for `class_name` scripts are tracked.** Convention from existing `main_scene.gd.uid`, `sprite_atlas.gd.uid`, `validate_assets.gd.uid`, the save scripts. When adding a new `class_name`, commit the auto-generated `.uid` sidecar alongside.
 - **Windows autocrlf produces benign `.import` modifications.** `git status` may show every `*.import` file as modified after running Godot, with `git diff` only printing line-ending warnings. `git diff --ignore-all-space` confirms no real content change. Don't restage them; they'll resolve on the next genuine update.
 - **Working directory drift.** Multi-step bash commands with `cd` can leave the shell in `tool/<module>/` from a previous build step. Always prefer absolute paths or `cd` back to repo root.
 - **Go 1.26 `go vet` is stricter than 1.20.** The `go.mod` files declare Go 1.20 but the installed toolchain is 1.26. Format-string bugs that 1.20 let slide (like `%d` on a `bool`) fail `go test` under 1.26 because `go test` runs `go vet` first.
@@ -192,13 +208,16 @@ Memory files under `~/.claude/projects/<project-slug>/memory/` (auto memory loca
 
 ## Pointers for deeper reading
 
-- `docs/rewrite-plan.md` — the phased checklist (start here for scope questions)
-- `docs/superpowers/specs/2026-04-25-godot-save-format-bridge-design.md` — Phase 3 design: GDScript port choice + JSON envelope schema + 4-session sequencing
-- `docs/superpowers/plans/2026-04-25-phase-3-session-1-cafe-round-trip.md` — Session 1 implementation plan (executed; useful as reference pattern for Session 2's plan)
+- `docs/rewrite-plan.md` — the phased checklist (start here for scope questions). Phase 3 is now marked done; Phase 4 is the next active phase.
+- `docs/devlog/2026-05-10-phase-3-save-format.md` — Phase 3 close-out: architecture decision, four-session arc, GDScript-specific surprises (`PackedByteArray` strings, `_b64` hybrid, `JSON.parse_string` floats), CI-as-done-signal.
+- `docs/superpowers/specs/2026-04-25-godot-save-format-bridge-design.md` — Phase 3 design: GDScript port choice + JSON envelope schema + 4-session sequencing.
+- `docs/superpowers/plans/2026-04-25-phase-3-session-1-cafe-round-trip.md` — Session 1 implementation plan (executed; useful as reference pattern for future session-scoped plans).
+- `docs/superpowers/plans/2026-04-25-phase-3-session-2-savegame-friendcafe.md` — Session 2 plan + the architectural deviation discovery for `read_string`.
+- `docs/superpowers/plans/2026-04-25-phase-3-session-3-oracle-envelope-ci.md` — Session 3 plan: oracle CLI, envelope walker, three-layer test integration, CI wiring.
 - `docs/devlog/2026-04-19-scudo-crash-hunt.md` — root cause of the Scudo crashes, GWP-ASan setup, runtime memory verification.
 - `docs/devlog/2026-04-12-megasession-wrap.md` — IAP bypass session + 14 commits across three phase boundaries.
 - `docs/devlog/2026-04-11-kickoff.md` — why Godot over the other rewrite paths.
 - `docs/devlog/2026-04-11-phase-2a-sprite-atlas.md` — most relevant for continuing Phase 2b.
 - `docs/superpowers/specs/2026-04-12-iap-debug-bypass-design.md` + `docs/superpowers/plans/2026-04-12-iap-debug-bypass.md` — IAP bypass design, Findings, and implementation plan. Only relevant if touching the legacy APK's billing path.
 
-Fourteen devlog entries total under `docs/devlog/` — read them chronologically for the full story, or jump to the latest two or three for context on the immediate next step. **Note:** Phase 3 Session 1 (2026-04-25) has not yet produced a devlog entry; that's deferred to Session 4's close-out.
+Fifteen devlog entries total under `docs/devlog/` — read them chronologically for the full story, or jump to the latest two or three for context on the immediate next step.
