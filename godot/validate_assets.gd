@@ -9,30 +9,39 @@ extends SceneTree
 # Run with:
 #   godot --headless --script godot/validate_assets.gd --path godot/
 
+# Accumulates failures from _init so _initialize can append the
+# autoload-dependent checks and then emit the final result.
+var _early_failures: Array = []
+
 func _init() -> void:
-	var failures: Array = []
+	# Checks 1-16: no autoload dependencies — safe to run in _init.
+	_early_failures += _validate_json("res://assets/data/foodData.json", "array", 1)
+	_early_failures += _validate_json("res://assets/data/characterData.json", "array", 1)
+	_early_failures += _validate_json("res://assets/data/animationData.json", "array", 1)
 
-	failures += _validate_json("res://assets/data/foodData.json", "array", 1)
-	failures += _validate_json("res://assets/data/characterData.json", "array", 1)
-	failures += _validate_json("res://assets/data/animationData.json", "array", 1)
+	_early_failures += _validate_json("res://assets/atlases/characterParts.offsets.json", "object", 0)
+	_early_failures += _validate_json("res://assets/atlases/characterParts.characterArt.json", "object", 0)
+	_early_failures += _validate_json("res://assets/atlases/furniture.offsets.json", "object", 0)
 
-	failures += _validate_json("res://assets/atlases/characterParts.offsets.json", "object", 0)
-	failures += _validate_json("res://assets/atlases/characterParts.characterArt.json", "object", 0)
-	failures += _validate_json("res://assets/atlases/furniture.offsets.json", "object", 0)
+	_early_failures += _validate_texture("res://assets/atlases/characterParts.png")
+	_early_failures += _validate_texture("res://assets/atlases/furniture.png")
+	_early_failures += _validate_texture("res://assets/images/boxer-human/back_head1.png")
 
-	failures += _validate_texture("res://assets/atlases/characterParts.png")
-	failures += _validate_texture("res://assets/atlases/furniture.png")
-	failures += _validate_texture("res://assets/images/boxer-human/back_head1.png")
+	_early_failures += _validate_font("res://assets/fonts/A Love of Thunder.ttf")
 
-	failures += _validate_font("res://assets/fonts/A Love of Thunder.ttf")
+	_early_failures += _validate_audio("res://assets/audio/Zombie Theme V1.ogg")
+	_early_failures += _validate_audio("res://assets/audio/sfx/blender.ogg")
 
-	failures += _validate_audio("res://assets/audio/Zombie Theme V1.ogg")
-	failures += _validate_audio("res://assets/audio/sfx/blender.ogg")
+	_early_failures += _validate_character_atlas()
+	_early_failures += _validate_texture_atlas()
+	_early_failures += _validate_main_scene()
+	_early_failures += _validate_cafe_render()
 
-	failures += _validate_character_atlas()
-	failures += _validate_texture_atlas()
-	failures += _validate_main_scene()
-	failures += _validate_cafe_render()
+
+func _initialize() -> void:
+	# Check 17: requires GameState autoload (available in _initialize, not _init).
+	var failures: Array = _early_failures
+	failures += _validate_customer_spawn()
 
 	if failures.is_empty():
 		print("\n========== VALIDATION PASSED ==========")
@@ -424,4 +433,97 @@ func _validate_cafe_render() -> Array:
 		return ["CafeRenderer.render returned " + str(count) + " but children counted " + str(floor_count + object_count)]
 
 	print("  OK cafe render: ", floor_count, " floor + ", object_count, " objects = ", count, " total")
+	return []
+
+func _validate_customer_spawn() -> Array:
+	# Phase 4 Session 2: spawn a customer in a fresh GameState + CustomerSystem,
+	# tick the system through full spawn -> walk -> seated, assert the customer
+	# reached its seat tile.
+	#
+	# This function runs in _initialize (not _init) so GameState autoload IS
+	# available. Types are accessed without explicit annotation to avoid a
+	# compile-time dependency chain from validate_assets.gd → CustomerSystem →
+	# GameState that would break in _init context. The classes compile correctly
+	# at project startup when autoloads are ready; untyped new() calls work fine.
+	var cafe_path := "res://test/fixtures/save/playerCafe.caf"
+	var bytes: PackedByteArray = FileAccess.get_file_as_bytes(cafe_path)
+	if bytes.is_empty():
+		return [cafe_path + ": fixture missing or empty"]
+
+	var cafe_dict: Dictionary = LegacyLoader.parse_cafe_bytes(bytes)
+	if cafe_dict.is_empty():
+		return ["LegacyLoader.parse_cafe_bytes returned empty"]
+
+	# Access GameState via node path. Even though _validate_customer_spawn is
+	# called from _initialize (where GameState IS available), the bare name
+	# "GameState" in any function triggers a compile-time identifier lookup that
+	# fails when validate_assets.gd is parsed. get_root().get_node() is a
+	# runtime call and resolves correctly.
+	var gs: Node = get_root().get_node_or_null("GameState")
+	if gs == null:
+		return ["GameState autoload not found at /root/GameState"]
+	gs.set("cafe_dict", {})
+	gs.set("occupied_seats", {})
+	gs.call("load_cafe_dict", cafe_dict)
+
+	var char_atlas: SpriteAtlas = SpriteAtlas.load_from(
+		"res://assets/atlases/characterParts.png",
+		"res://assets/atlases/characterParts.offsets.json",
+		"res://assets/atlases/characterParts.characterArt.json")
+	if char_atlas == null:
+		return ["characterParts atlas load failed"]
+
+	var parent := Node2D.new()
+	# Load and instantiate CustomerSystem without static type annotation to avoid
+	# triggering a re-compile of customer_system.gd at validate_assets.gd
+	# parse time (when GameState is not yet in scope).
+	var SystemScript = ResourceLoader.load(
+		"res://scripts/systems/customer_system.gd", "",
+		ResourceLoader.CACHE_MODE_IGNORE)
+	if SystemScript == null:
+		return ["customer_system.gd failed to load"]
+	var system = SystemScript.new()
+	system.init(parent, char_atlas)
+	parent.add_child(system)
+
+	# Tick the system. First spawn fires at t=1.0s. Walk takes 3.0s. Sit takes
+	# 2.0s. So at t = 1.0 + 3.0 = 4.0s, customer should be seated. Tick in 0.1
+	# steps for granularity. Assert seated state at simulated t=4.5s.
+	var sim_dt: float = 0.1
+	var sim_steps: int = 45  # 4.5 seconds
+	for i in range(sim_steps):
+		system.tick(sim_dt)
+
+	var actor = system.get_active_customer()
+	if actor == null:
+		parent.queue_free()
+		return ["CustomerSystem: no active customer after 4.5s sim"]
+
+	# CustomerActor.State enum: WALKING=0, SEATED=1, LEAVING=2
+	var SEATED_STATE: int = 1
+	if int(actor.state) != SEATED_STATE:
+		parent.queue_free()
+		return ["CustomerActor: expected SEATED state (1) at t=4.5s, got " + str(actor.state)]
+
+	# The customer's position should equal the seat's world position.
+	var distance_from_target: float = actor.position.distance_to(actor.target_pos)
+	if distance_from_target > 0.5:
+		parent.queue_free()
+		return [
+			"CustomerActor: position " + str(actor.position) +
+			" should match target " + str(actor.target_pos) +
+			" (distance=" + str(distance_from_target) + ")"
+		]
+
+	# The seat the customer chose should be in occupied_seats.
+	var occupied: Dictionary = gs.get("occupied_seats")
+	if not occupied.has(actor.seat_tile_idx):
+		parent.queue_free()
+		return ["GameState.occupied_seats missing tile_idx " + str(actor.seat_tile_idx)]
+
+	print("  OK customer spawn: actor SEATED at tile ",
+		actor.seat_tile_idx,
+		" world=", actor.position, " after sim t=4.5s")
+
+	parent.queue_free()
 	return []

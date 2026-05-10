@@ -14,3 +14,7 @@ config/name="Zombie Cafe Revival — Asset Validation"
 config/description="Phase 1 asset tree import validation scaffold."
 run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.6")
+
+[autoload]
+
+GameState="*res://scripts/game_state.gd"

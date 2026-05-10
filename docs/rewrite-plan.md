@@ -200,6 +200,18 @@ Landed (Session 1 of 7 per `docs/superpowers/specs/2026-05-10-phase-4-game-tick-
 - *(known imperfection, deferred to Session 1.5)* Coordinate system uses Cartesian `(tx*50, ty*50)` rather than the legacy game's isometric `((tx-ty)*25, (tx+ty)*25)` projection. Tile sprites are isometric diamond textures placed on a Cartesian grid — visually flat, not properly perspective-rendered. Acceptable per spec (§3.3 "best-effort coordinate fit"); proper isometric placement is a Session 1.5 follow-up.
 - *(done)* All regressions: 16/16 validator PASSED, 207/0 save round-trip, `go test ./tool/file_types/...` ok, all 5 native workspace modules build clean, `tool/server` builds clean under `GOOS=js GOARCH=wasm`.
 
+Landed (Session 2 of 7 per `docs/superpowers/specs/2026-05-10-phase-4-game-tick-design.md`):
+
+- *(done)* `godot/scripts/game_state.gd` — Phase 4 `GameState` autoload (Node). Single canonical mutable copy of the loaded `Cafe` Dict + occupied-seat tracking + cross-system signals (`customer_spawned`, `customer_seated`, `customer_left`). Reachable via `/root/GameState` at runtime. Registered as autoload in `project.godot`.
+- *(done)* `godot/scripts/systems/customer_actor.gd` — `class_name CustomerActor` (Node2D). Per-customer state machine (WALKING / SEATED / LEAVING). Manual lerp motion via `tick(delta)`; **no Godot Tween** so the system is fully headless-testable. Placeholder visual is a single Sprite2D from boxer-human pieces (full 27-piece skeletal customer is Session 6).
+- *(done)* `godot/scripts/systems/customer_system.gd` — `class_name CustomerSystem` (Node). Spawn timer + seat finder + active-customer tracker. Single concurrent customer; multi-customer is Session 2.5. Reads `Cafe.Tiles[]` for `FurnitureType=3` chairs.
+- *(spec correction)* The umbrella spec said "FurnitureType=2 = seat" — that was wrong. `tool/file_types/cafe.go:36` confirms 1=Stove, 2=ServingCounter; chairs are `FurnitureType=3`. Verified visually (`furniture/19.png` is a chair) and via fixture distribution (4 entries in playerCafe.caf).
+- *(done)* `godot/main.tscn` — added `Camera2D` at `(875, 1375)` with `zoom=(0.4, 0.4)` so the cafe interior + spawn point are simultaneously visible.
+- *(done)* `godot/scripts/main_scene.gd` — `_assemble_cafe` initializes `GameState.cafe_dict` and instantiates `CustomerSystem`. `_process(delta)` drives `system.tick(delta)`.
+- *(done)* `godot/validate_assets.gd` — 17th check `_validate_customer_spawn`: programmatically spawns a customer in a fresh `GameState` + `CustomerSystem`, fast-forwards via direct `tick(delta)` calls (sim t=4.5s in 0.1s steps), asserts `SEATED` state + position matches target + `occupied_seats[seat_tile_idx] == true`. Result: customer SEATED at tile 472 (world 850, 650 — a chair at grid coord (17, 13)).
+- *(headless-mode workaround documented)* Godot 4's `--script` mode with `extends SceneTree` doesn't initialize project autoloads during `_init`. Future Phase 4 validator checks that touch autoloads must use `get_root().get_node_or_null("GameState")` access OR run inside `_initialize()` rather than `_init`. Also: classes that import `GameState` at parse time fail compilation in this mode — `CustomerSystem` is `load("res://scripts/systems/customer_system.gd").new()` instead of `CustomerSystem.new()`. The runtime path (GUI Godot) is unaffected.
+- *(done)* All regressions: 17/17 validator PASSED, 207/0 save round-trip, Go file_types tests + workspace + wasm builds all clean.
+
 ### Phase 5 — Online features
 
 **Done when:** the Godot client authenticates (or stubs auth), uploads its save state to `tool/server/`, fetches a random friend cafe via `getrandomgamestate`, and lets the player raid it. Friend metadata is no longer hardcoded.

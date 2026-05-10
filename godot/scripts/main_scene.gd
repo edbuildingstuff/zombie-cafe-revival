@@ -37,6 +37,8 @@ const CELL_W := 140.0
 const CELL_H := 140.0
 const GRID_ORIGIN := Vector2(80.0, 80.0)
 
+var _customer_system = null  # CustomerSystem instance; untyped to avoid compile dep on GameState
+
 
 func _ready() -> void:
 	# Guard against double-assembly when the validation test has
@@ -130,7 +132,40 @@ func _assemble_cafe() -> int:
 		"walls": walls_atlas,
 		"furn": furn_atlas,
 	}
-	return CafeRenderer.render(self, cafe_dict, atlases)
+	var sprite_count: int = CafeRenderer.render(self, cafe_dict, atlases)
+
+	# Phase 4 Session 2: hand the loaded Dict to GameState and wire up
+	# the customer system. The character atlas is reused as the customer
+	# sprite source (boxer-human placeholder pieces).
+	# Access GameState via node path so this script compiles in headless
+	# --script validator contexts where autoload globals aren't yet in scope.
+	var gs: Node = get_node_or_null("/root/GameState")
+	if gs != null:
+		gs.call("load_cafe_dict", cafe_dict)
+	else:
+		push_warning("main_scene: GameState autoload not found; skipping cafe_dict load")
+
+	var char_atlas := SpriteAtlas.load_from(ATLAS_PNG, OFFSETS_JSON, CHARACTER_ART_JSON)
+	if char_atlas == null:
+		push_error("main_scene: char_atlas load failed")
+		return sprite_count  # Still return — cafe is rendered, just no customers.
+
+	# Load CustomerSystem via script path rather than global class name to avoid
+	# a compile-time dependency on GameState (which fails in headless --script mode).
+	var cs_script = load("res://scripts/systems/customer_system.gd")
+	if cs_script == null:
+		push_error("main_scene: CustomerSystem script failed to load")
+		return sprite_count
+	_customer_system = cs_script.new()
+	_customer_system.init(self, char_atlas)
+	add_child(_customer_system)
+
+	return sprite_count
+
+
+func _process(delta: float) -> void:
+	if _customer_system != null:
+		_customer_system.tick(delta)
 
 
 ## Replaces the grid layout with a single-keyframe pose pulled from an
